@@ -5,7 +5,7 @@ import base64
 import datetime
 import requests
 import xml.etree.ElementTree as ET
-from habitatDataset import Dataset as DS
+from hbt_dataset import Dataset as DS
     
 class Session:
     """ Class representing Session on the platform """
