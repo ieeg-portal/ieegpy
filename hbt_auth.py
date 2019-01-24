@@ -40,7 +40,6 @@ class Session:
         self.username = name
         self.password = md5(pwd)
 
-    @staticmethod
     def url_builder(self, path):
         return Session.method + Session.host + Session.port + path
 
@@ -125,7 +124,6 @@ class Session:
 
     # For backward-compatibility
     @deprecated
-    @staticmethod
     def urlBuilder(self, path):
         return Session.url_builder(path)
 
