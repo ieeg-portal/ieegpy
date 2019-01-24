@@ -6,107 +6,127 @@ import datetime
 import requests
 import xml.etree.ElementTree as ET
 from hbt_dataset import Dataset as DS
-    
+from deprecation import deprecated
+
+
 class Session:
-    """ Class representing Session on the platform """
-    host = "localhost"
-    #host = "view-qa.ieeg.org"
-    port = ":8886"
-    #port = ""
-    method = 'http://'
-    
-    
+    """
+    Class representing Session on the platform
+    """
+    host = "www.ieeg.org"
+    port = ""
+    method = 'https://'
+
     username = ""
     password = ""
     
     def __init__(self, name, pwd):
         self.username = name
         self.password = md5(pwd)    
-        
-    def urlBuilder(self, path):
-        return Session.method + Session.host  + Session.port+ path
-        
-    def _createWSHeader(self,path, httpMethod, query, payload):
-        dTime = datetime.datetime.now().isoformat()
-        sig = self._signatureGenerator(path, httpMethod, query, payload, dTime)
-        return {'username': self.username, 
-            'timestamp': dTime, 
-            'signature': sig, 
+
+    @staticmethod
+    def url_builder(self, path):
+        return Session.method + Session.host + Session.port + path
+
+    def create_ws_header(self, path, http_method, query, payload):
+        d_time = datetime.datetime.now().isoformat()
+        sig = self._signatureGenerator(path, http_method, query, payload, d_time)
+        return {'username': self.username, \
+            'timestamp': d_time, \
+            'signature': sig, \
             'Content-Type': 'application/xml'};
         
-    def _signatureGenerator(self, path, httpMethod, query, payload, dTime):
-        """ Signature Generator, used to authenticate user in portal """
+    def _signature_generator(self, path, http_method, query, payload, d_time):
+        """
+        Signature Generator, used to authenticate user in portal
+        """
     
         m = hashlib.sha256()
         
-        queryStr = ""
+        query_str = ""
         if len(query):
-            for k,v in query.items():
-                queryStr += k + "=" + str(v) + "&"  
-            queryStr = queryStr[0:-1]              
+            for k, v in query.items():
+                query_str += k + "=" + str(v) + "&"
+            query_str = query_str[0:-1]
                     
         m.update(payload)        
-        payloadHash =  base64.standard_b64encode(m.digest())
-        
-        toBeHashed = (self.username+"\n"+ 
-            self.password+ "\n"+
-            httpMethod+"\n"+
-            self.host+"\n"+
-            path+"\n"+
-            queryStr+"\n"+
-            dTime+"\n"+
-            payloadHash)
+        payload_hash =  base64.standard_b64encode(m.digest())
+
+        to_be_hashed = (self.username + "\n" +
+                        self.password + "\n" +
+                        http_method + "\n" +
+                        self.host + "\n" +
+                        path + "\n" +
+                        query_str + "\n" +
+                        dTime + "\n" +
+                        payload_hash)
     
         m2 = hashlib.sha256()
-        m2.update(toBeHashed)
+        m2.update(to_be_hashed)
         return base64.standard_b64encode(m2.digest())
         
-    def openDataset(self, name):
-        """ Returning a dataset object """
+    def open_dataset(self, name):
+        """
+        Return a dataset object
+        """
         
         # Request location
-        getIDbySnapNamePath = "/services/timeseries/getIdByDataSnapshotName/"
+        get_id_by_snap_name_path = "/services/timeseries/getIdByDataSnapshotName/"
         
         # Create request content  
-        httpMethod = "GET"
-        reqPath = getIDbySnapNamePath + name
-        payload = self._createWSHeader(reqPath, httpMethod, "", "")
-        url = Session.method + Session.host  + Session.port+ reqPath
+        http_method = "GET"
+        req_path = get_id_by_snap_name_path + name
+        payload = self._create_ws_header(req_path, http+method, "", "")
+        url = Session.method + Session.host + Session.port + req_path
         
         r = requests.get(url, headers=payload,verify=False);
         
         # Check response
-        print r.text
+        print (r.text)
         if r.status_code != 200:
             raise connectionError('Cannot find Study,')
        
         # Request location 
-        getTimeSeriesStr = '/services/timeseries/getDataSnapshotTimeSeriesDetails/'
+        get_time_series_url = '/services/timeseries/getDataSnapshotTimeSeriesDetails/'
         
         # Create request content 
-        snapshotID = r.text
-        reqPath = getTimeSeriesStr + snapshotID
-        payload = self._createWSHeader(reqPath, httpMethod, "", "")
-        url = Session.method + Session.host  + Session.port + reqPath
-        r = requests.get(url, headers=payload,verify=False);
+        snapshot_id = r.text
+        req_path = get_time_series_url + snapshot_id
+        payload = self._create_ws_header(req_path, http_method, "", "")
+        url = Session.method + Session.host + Session.port + req_path
+        r = requests.get(url, headers=payload, verify=False)
         
         # Return Habitat Dataset object
-        return DS(ET.fromstring(r.text), snapshotID, self) 
-        
+        return DS(ET.fromstring(r.text), snapshotID, self)
 
-def md5(userString):
-    """ Returns MD5 hashed string """
+    def close_dataset(self, ds):
+        """
+        Close connection (for future use)
+        :param ds: Dataset to close
+        :return:
+        """
+        return
+
+    # For backward-compatibility
+    @deprecated
+    @staticmethod
+    def urlBuilder(self, path):
+        return Session.url_builder(path)
+
+    @deprecated
+    def openDataset(self, name):
+        return self.open_dataset(name)
+
+    @deprecated
+    def _createWSHeader(self, path, http_method, query, payload):
+        return self.create_ws_header(path, http_method, query, payload)
+
+def md5(user_string):
+    """
+    Return MD5 hashed string
+    """
     m = hashlib.md5()
-    m.update(userString)
+    m.update(user_string)
     return m.hexdigest()
     
 
-class connectionError(Exception):
-    def __init__(self, value):
-        self.value = value
-    def __str__(self):
-        return repr(self.value)
-    
-        
-        
-    
