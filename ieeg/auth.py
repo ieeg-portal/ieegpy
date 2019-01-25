@@ -21,7 +21,7 @@ import datetime
 import requests
 import xml.etree.ElementTree as ET
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
-from hbt_dataset import Dataset as DS, IeegConnectionError
+from ieeg.dataset import Dataset as DS, IeegConnectionError
 from deprecation import deprecated
 
 class Session:

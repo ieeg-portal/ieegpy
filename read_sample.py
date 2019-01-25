@@ -17,7 +17,14 @@
 ##################################################################################
 
 import sys
-from hbt_auth import Session
+from ieeg.auth import Session
+from ieeg.processing import ProcessSlidingWindowPerChannel, ProcessSlidingWindowAcrossChannels
+from mprov.connection.mprov_connection import MProvConnection
+
+import numpy as np
+
+default_user = 'sample'
+default_password = 'default'
 
 
 if len(sys.argv) < 2:
@@ -25,13 +32,14 @@ if len(sys.argv) < 2:
     print('Syntax: read_sample [user id (in double-quotes if it has a space)] [password]')
     sys.exit(1)
 
-print ('Logging in', sys.argv[1], '/ ****')
+print ('Logging into IEEG:', sys.argv[1], '/ ****')
 s = Session(sys.argv[1], sys.argv[2])
+print ('Logging into local MProv: ', default_user, '/ ****')
+conn = MProvConnection(default_user, default_password, None)
+print("Successfully connected to the MProv server")
 
 # We pick one dataset...
 ds = s.open_dataset('I004_A0003_D001')
-
-print (ds)
 
 # Iterate through all of the channels and print their metadata
 for name in ds.get_channel_labels():
@@ -41,6 +49,18 @@ for name in ds.get_channel_labels():
 start = 13.09 * 1e6
 # We can use get_data to get a 2D array, or get_dataframe
 # to get a Pandas dataframe
-print (ds.get_dataframe(start, 100000, ds.get_channel_indices(['LEFT_01', 'LEFT_03', 'LEFT_05'])))#[0,2,4,6]))
+#print (ds.get_dataframe(start, 100000, ds.get_channel_indices(['LEFT_01', 'LEFT_03', 'LEFT_05'])))
+
+per_channel = ProcessSlidingWindowPerChannel.execute(ds, ['LEFT_01', 'LEFT_03', 'LEFT_05'],
+                start, 100000, 10000, 20000,
+                lambda x: np.mean(x))
+
+print (per_channel.shape, per_channel)
+
+overall = ProcessSlidingWindowAcrossChannels.execute(ds, ['LEFT_01', 'LEFT_03', 'LEFT_05'],
+                start, 100000, 10000, 20000,
+                lambda x: np.mean(x))
+
+print (overall.shape, overall)
 
 s.close_dataset(ds)

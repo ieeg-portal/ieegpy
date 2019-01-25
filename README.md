@@ -1,4 +1,4 @@
-# ieegpy
+# ieeg
 *A simple Python API for IEEG.org*
 
 **Authors: Joost B. Wagenaar, Zachary G. Ives, University of Pennsylvania**
@@ -32,12 +32,12 @@ python setup.py install
 
 ## Major Functionality
 
-### Session (hbt_auth)
+### Session (ieeg.auth)
 
 * `open_dataset`(name):  fetches the metadata for an IEEG dataset, by its unique ID.  Returns a `TimeSeriesDetails` object.
 * `close_dataset`(ds):  closes the connection for an IEEG dataset associated with a `TimeSeriesDetails` object.
 
-### TimeSeriesDetails (hbt_dataset)
+### TimeSeriesDetails (ieeg.dataset)
 
 You may access any of the following variables:
 * `acquisition`: Acquisition system (if stored for channel).
@@ -48,7 +48,7 @@ You may access any of the following variables:
 * `number_of_samples`: number of samples in the channel recording.
 * `start_time`: "official" start time of the recording. For human data this is usually masked.
 
-### Dataset (hbt_dataset)
+### Dataset (ieeg.dataset)
 
 * `get_channel_labels`(): Returns an ordered list of channel labels
 * `get_time_series_details`(label): Returns a `TimeSeriesDetails` for the named channel

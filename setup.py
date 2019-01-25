@@ -14,10 +14,22 @@
 # limitations under the License.
 ##################################################################################
 
+import setuptools
 from distutils.core import setup, Extension
 
-setup(name='pyhabitat',
+with open("README.md", "r") as fh:
+    long_description = fh.read()
+
+setup(name='ieeg',
       version='1.0',
-      description='API for the habitat platform (IEEG.org)',
-      install_requires=['deprecation','requests','numpy','pandas'],
-      py_modules=['hbt_auth', 'hbt_dataset'])
+      description='API for the IEEG.org platform',
+      install_requires=['deprecation','requests','numpy','pandas', 'pennprov==2.2.0.dev4'],
+      packages=setuptools.find_packages(),
+      long_description=long_description,
+      long_description_content_type="text/markdown",
+      url="https://github.com/ieeg-portal/ieegpy",
+      classifiers=[
+          'Programming Language :: Python :: 2-3',
+          'License :: OSI Approved :: Apache License',
+          'Operating System :: OS Independent',
+      ])
