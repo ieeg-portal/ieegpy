@@ -27,16 +27,19 @@ default_user = 'sample'
 default_password = 'default'
 
 
-if len(sys.argv) < 2:
+if len(sys.argv) < 3:
     print('To run this sample program, you must supply your user ID and password on the command-line')
     print('Syntax: read_sample [user id (in double-quotes if it has a space)] [password]')
     sys.exit(1)
 
 print ('Logging into IEEG:', sys.argv[1], '/ ****')
 s = Session(sys.argv[1], sys.argv[2])
-print ('Logging into local MProv: ', default_user, '/ ****')
-conn = MProvConnection(default_user, default_password, None)
-print("Successfully connected to the MProv server")
+
+conn = None
+if len(sys.argv) > 3:
+    print ('Logging into local MProv: ', default_user, '/ ****')
+    conn = MProvConnection(default_user, default_password, None)
+    print("Successfully connected to the MProv server")
 
 # We pick one dataset...
 ds = s.open_dataset('I004_A0003_D001')
@@ -51,15 +54,18 @@ start = 13.09 * 1e6
 # to get a Pandas dataframe
 #print (ds.get_dataframe(start, 100000, ds.get_channel_indices(['LEFT_01', 'LEFT_03', 'LEFT_05'])))
 
-per_channel = ProcessSlidingWindowPerChannel.execute(ds, ['LEFT_01', 'LEFT_03', 'LEFT_05'],
+
+
+per_channel = ProcessSlidingWindowPerChannel.execute_with_provenance(ds, ['LEFT_01', 'LEFT_03', 'LEFT_05'],
                 start, 100000, 10000, 20000,
-                lambda x: np.mean(x))
+                lambda x: np.mean(x), conn, 'avg', 'I004_A0003_D001')
+
 
 print (per_channel.shape, per_channel)
 
-overall = ProcessSlidingWindowAcrossChannels.execute(ds, ['LEFT_01', 'LEFT_03', 'LEFT_05'],
+overall = ProcessSlidingWindowAcrossChannels.execute_with_provenance(ds, ['LEFT_01', 'LEFT_03', 'LEFT_05'],
                 start, 100000, 10000, 20000,
-                lambda x: np.mean(x))
+                lambda x: np.mean(x), conn, 'avg', 'I004_A0003_D001')
 
 print (overall.shape, overall)
 
