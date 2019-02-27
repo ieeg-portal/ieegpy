@@ -21,7 +21,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(name='ieeg',
-      version='1.0',
+      version='1.1',
       description='API for the IEEG.org platform',
       install_requires=['deprecation','requests','numpy','pandas', 'pennprov==2.2.0.dev4'],
       packages=setuptools.find_packages(),
