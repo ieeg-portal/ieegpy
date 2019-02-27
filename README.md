@@ -13,6 +13,11 @@ Supported environments:
 
 First, be sure you have signed up at [IEEG.org](www.ieeg.org) so you have an active account and password.
 
+Install the dependencies:
+```
+pip install requests numpy pandas deprecation pennprov
+```
+
 You may then run:
 ```
 python read_sample.py myid mypassword
@@ -25,7 +30,6 @@ You'll see that the sample program makes a connection to IEEG.org, fetches detai
 *Optional*: To install the libraries from this repository into your Python path, you can:
 
 ```
-pip install requests numpy pandas deprecation
 python setup.py build
 python setup.py install
 ```  

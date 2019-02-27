@@ -1,8 +1,8 @@
 from ieeg.dataset import Dataset
 import numpy as np
 import math
-import mprov.connection.mprov_connection
-from mprov.metadata.stream_metadata import BasicTuple, BasicSchema
+import pennprov.connection.mprov_connection
+from pennprov.metadata.stream_metadata import BasicTuple, BasicSchema
 
 
 class ProcessSlidingWindowPerChannel:

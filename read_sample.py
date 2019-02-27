@@ -19,7 +19,7 @@
 import sys
 from ieeg.auth import Session
 from ieeg.processing import ProcessSlidingWindowPerChannel, ProcessSlidingWindowAcrossChannels
-from mprov.connection.mprov_connection import MProvConnection
+from pennprov.connection.mprov_connection import MProvConnection
 
 import numpy as np
 
