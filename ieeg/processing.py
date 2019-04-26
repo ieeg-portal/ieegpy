@@ -13,6 +13,7 @@ class ProcessSlidingWindowPerChannel:
     Returns a 2D matrix
     """
 
+    @staticmethod
     def write_window_annot(mprov_connection, input_name, input_start, input_duration,
                            output_name, output_index, output_value_json):
         # mprov_connection.store_windowed_result(output_name, output_index,
@@ -28,12 +29,14 @@ class ProcessSlidingWindowPerChannel:
         #                                                    input_start + input_duration)
         return
 
+    @staticmethod
     def execute(dataset, channel_list,
                 start_time_usec, window_size_usec, slide_usec, duration_usec,
                 per_channel_computation):
         return ProcessSlidingWindowPerChannel.execute_with_provenance(dataset, channel_list, start_time_usec, window_size_usec, slide_usec,
                                             duration_usec, per_channel_computation, None, None, None)
 
+    @staticmethod
     def execute_with_provenance(dataset, channel_list,
                                 start_time_usec, window_size_usec, slide_usec, duration_usec,
                                 per_channel_computation, mprov_connection, op_name, in_name):
@@ -50,7 +53,7 @@ class ProcessSlidingWindowPerChannel:
             ProcessSlidingWindowPerChannel.write_window_annot(mprov_connection, in_name, 0, window_size_usec,
                                     op_name, ret.shape[1] - 1, '')
 
-        for window in range(1, math.ceil(duration_usec / slide_usec)):
+        for window in range(1, int(math.ceil(duration_usec / slide_usec))):
             start_index = start_time_usec + window * slide_usec
 
             matrix = dataset.get_data(start_index, window_size_usec, channel_indices)
@@ -74,19 +77,21 @@ class ProcessSlidingWindowAcrossChannels:
     Returns an array
     """
 
+    @staticmethod
     def execute(dataset, channel_subset_list, start_time_usec, window_size_usec, slide_usec, duration_usec,
                 per_block_computation):
         return ProcessSlidingWindowAcrossChannels.execute_with_provenance(dataset, channel_subset_list, start_time_usec, window_size_usec, slide_usec,
                                             duration_usec,
                                             per_block_computation, None, None, None)
 
+    @staticmethod
     def execute_with_provenance(dataset, channel_subset_list, start_time_usec, window_size_usec, slide_usec,
                                 duration_usec, per_block_computation, mprov_connection, op_name, in_name):
         channel_indices = dataset.get_channel_indices(channel_subset_list)
 
         ret = []
 
-        for window in range(0, math.ceil(duration_usec / slide_usec)):
+        for window in range(0, int(math.ceil(duration_usec / slide_usec))):
             start_index = start_time_usec + window * slide_usec
 
             matrix = dataset.get_data(start_index, window_size_usec, channel_indices)
