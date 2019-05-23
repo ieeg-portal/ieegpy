@@ -26,7 +26,7 @@ class TimeSeriesDetails:
     """
     Metadata on a given time series
     """
-
+    portal_id = ""
     acquisition = ""
     name = ""
     duration = 0.
@@ -37,7 +37,8 @@ class TimeSeriesDetails:
     start_time = 0
     voltage_conversion_factor = 1.
 
-    def __init__(self, name, label, duration, min_sample, max_sample, number_of_samples, start_time, voltage_conversion):
+    def __init__(self, portal_id, name, label, duration, min_sample, max_sample, number_of_samples, start_time, voltage_conversion):
+        self.portal_id = portal_id
         self.name = name
         self.channel_label = label
         self.duration = float(duration)
@@ -51,44 +52,70 @@ class TimeSeriesDetails:
     def __str__(self):
         return self.name + "(" + self.channel_label + ") spans " + \
             str(self.duration) + " usec, range [" + str(self.min_sample) + "-" + \
-               str(self.max_sample) + "] in " + str(self.number_of_samples) + \
-               str(self.number_of_samples) + " samples.  Starts @" + str(self.start_time) + \
-               " with voltage conv factor " + str(self.voltage_conversion_factor)
+            str(self.max_sample) + "] in " + str(self.number_of_samples) + \
+            str(self.number_of_samples) + " samples.  Starts @" + str(self.start_time) + \
+            " with voltage conv factor " + str(self.voltage_conversion_factor)
+
+
+class Annotation:
+    """
+    A timeseries annotation on the platform
+    """
+
+    def __init__(self, portal_id, annotated, annotator, _type, description, layer, start_time_offset_usec, end_time_offset_usec):
+        self.portal_id = str(portal_id)
+        self.annotated = annotated
+        self.annotator = annotator
+        self.type = _type
+        self.description = description
+        self.layer = layer
+        self.start_time_offset_usec = start_time_offset_usec
+        self.end_time_offset_usec = end_time_offset_usec
+
+    def __repr__(self):
+        return "annotation(" + self.portal_id + "): " + self.type + "(" + str(self.start_time_offset_usec) + ", " + str(self.end_time_offset_usec) + ")"
+
 
 class Dataset:
     """
     Class representing Dataset on the platform
     """
     snap_id = ""
-    ts_details = {} # Time series details
+    ts_details = {}  # Time series details by label
+    ts_details_by_id = {}  # Time series details by portal_id
     ch_labels = []  # Channel Labels
     ts_array = []   # Channel
-    
+
     def __init__(self, ts_details, snapshot_id, parent):
         self.session = parent
         self.snap_id = snapshot_id
-        details = ts_details.findall('details')[0]  #only one details in timeseriesdetails
-        
+        # only one details in timeseriesdetails
+        details = ts_details.findall('details')[0]
+
         for dt in details.findall('detail'):
-            # ET.dump(dt)
+            ET.dump(dt)
             name = dt.findall('channelLabel')[0].text
+            portal_id = dt.findall('revisionId')[0].text
+            details = TimeSeriesDetails(portal_id,
+                                        dt.findall('name')[0].text,
+                                        name,
+                                        dt.findall('duration')[0].text,
+                                        dt.findall('minSample')[0].text,
+                                        dt.findall('maxSample')[0].text,
+                                        dt.findall('numberOfSamples')[0].text,
+                                        dt.findall('startTime')[0].text,
+                                        dt.findall('voltageConversionFactor')[0].text,)
             self.ch_labels.append(name)
             self.ts_array.append(dt)
-            self.ts_details[name] = TimeSeriesDetails(dt.findall('name')[0].text,
-                                                      dt.findall('channelLabel')[0].text,
-                                                      dt.findall('duration')[0].text,
-                                                      dt.findall('minSample')[0].text,
-                                                      dt.findall('maxSample')[0].text,
-                                                      dt.findall('numberOfSamples')[0].text,
-                                                      dt.findall('startTime')[0].text,
-                                                      dt.findall('voltageConversionFactor')[0].text,)
-             
+            self.ts_details[name] = details
+            self.ts_details_by_id[portal_id] = details
+
     def __repr__(self):
         return "Dataset with: " + str(len(self.ch_labels)) + " channels."
-             
+
     def __str__(self):
         return "Dataset with: " + str(len(self.ch_labels)) + " channels."
-            
+
     def get_channel_labels(self):
         return self.ch_labels
 
@@ -109,7 +136,7 @@ class Dataset:
         :return: object of type TimeSeriesDetails
         """
         return self.ts_details[label]
-             
+
     def get_data(self, start, duration, channels):
         """
         Returns data from the IEEG platform
@@ -121,14 +148,14 @@ class Dataset:
 
         def all_same(items):
             return all(x == items[0] for x in items)
-        
+
         # Request location
         get_data_str = "/services/timeseries/getUnscaledTimeSeriesSetBinaryRaw/"
 
         # Build Data Content XML
         wrapper1 = ET.Element('timeSeriesIdAndDChecks')
         wrapper2 = ET.SubElement(wrapper1, 'timeSeriesIdAndDChecks')
-        i=0
+        i = 0
         for ts in self.ts_array:
             if i in channels:
                 el1 = ET.SubElement(wrapper2, 'timeSeriesIdAndCheck')
@@ -137,33 +164,39 @@ class Dataset:
                 el3 = ET.SubElement(el1, 'id')
                 el3.text = ts.findall('revisionId')[0].text
             i += 1
-            
-        data = ET.tostring(wrapper1, encoding="us-ascii", method="xml").decode('utf-8')
+
+        data = ET.tostring(wrapper1, encoding="us-ascii",
+                           method="xml").decode('utf-8')
         data = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>' + data
-        
-        # Create request content        
+
+        # Create request content
         req_path = get_data_str + self.snap_id
         http_method = "POST"
         params = {'start': start, 'duration': duration}
-        payload = self.session.create_ws_header(req_path, http_method, params, data)
+        payload = self.session.create_ws_header(
+            req_path, http_method, params, data)
         url_str = self.session.url_builder(req_path)
-        
-        # response to request 
-        r = requests.post(url_str, headers=payload, params=params, data=data,verify=False)
+
+        # response to request
+        r = requests.post(url_str, headers=payload,
+                          params=params, data=data, verify=False)
 
         # collect data in numpy array
-        d = np.fromstring(r.content, dtype='>i4') 
+        d = np.fromstring(r.content, dtype='>i4')
         h = r.headers
 
         # Check all channels are the same length
-        sample_per_row = [int(numeric_string) for numeric_string in r.headers['samples-per-row'].split(',')]
+        sample_per_row = [int(numeric_string)
+                          for numeric_string in r.headers['samples-per-row'].split(',')]
         if not all_same(sample_per_row):
-            raise IeegConnectionError('Not all channels in response have equal length')
-            
-        conv_f = np.array([float(numeric_string) for numeric_string in r.headers['voltage-conversion-factors-mv'].split(',')])
-    
+            raise IeegConnectionError(
+                'Not all channels in response have equal length')
+
+        conv_f = np.array([float(numeric_string)
+                           for numeric_string in r.headers['voltage-conversion-factors-mv'].split(',')])
+
         # Reshape to 2D array and Multiply by conversionFactor
-        d2 = np.reshape(d, (-1,len(sample_per_row))) * conv_f[np.newaxis,:]
+        d2 = np.reshape(d, (-1, len(sample_per_row))) * conv_f[np.newaxis, :]
 
         return d2
 
@@ -184,28 +217,70 @@ class Dataset:
         Returns a dictionary mapping layer names to annotation count for this Dataset.
         """
 
-        # Create request content        
+        # Create request content
         req_path = "/services/timeseries/getCountsByLayer/" + self.snap_id
         http_method = "GET"
-        payload = self.session.create_ws_header(req_path, http_method, request_json=True)
+        payload = self.session.create_ws_header(
+            req_path, http_method, request_json=True)
         url_str = self.session.url_builder(req_path)
-        
-        # response to request 
+
+        # response to request
         r = requests.get(url_str, headers=payload, verify=False)
         response_body = r.json()
         if r.status_code != requests.codes.ok:
             print(response_body)
-            raise IeegConnectionError('Could not get annotation layers for dataset')
-        countsByLayer = response_body['countsByLayer']['countsByLayer']
-        if not countsByLayer:
+            raise IeegConnectionError(
+                'Could not get annotation layers for dataset')
+        counts_by_layer = response_body['countsByLayer']['countsByLayer']
+        if not counts_by_layer:
             return {}
-        # If there is one layer, entry will be a dictionary. 
+        # If there is one layer, entry will be a dictionary.
         # If there is more than one, entry will be a list of dictionaries.
-        entry = countsByLayer['entry']
+        entry = counts_by_layer['entry']
         try:
             return {entry['key']: entry['value']}
         except TypeError:
             return {e['key']: e['value'] for e in entry}
+
+    def get_annotations(self, layer_name):
+        req_path = '/services/timeseries/getTsAnnotations/' + \
+            self.snap_id + '/' + layer_name
+        http_method = "GET"
+        payload = self.session.create_ws_header(
+            req_path, http_method, request_json=True)
+        url_str = self.session.url_builder(req_path)
+
+        r = requests.get(url_str, headers=payload, verify=False)
+        response_body = r.json()
+        if r.status_code != requests.codes.ok:
+            print(response_body)
+            raise IeegConnectionError(
+                'Could not get annotation layer ' + layer_name)
+
+        timeseries_annotations = response_body['timeseriesannotations']
+        json_annotations = timeseries_annotations['annotations']['annotation']
+        try:
+            annotations = [Annotation(
+                a['revId'],
+                [],
+                a['annotator'],
+                a['type'],
+                a['description'],
+                a['layer'],
+                a['startTimeUutc'],
+                a['endTimeUutc'])
+                for a in json_annotations]
+        except TypeError:
+            annotations = [Annotation(
+                json_annotations['revId'],
+                [],
+                json_annotations['annotator'],
+                json_annotations['type'],
+                json_annotations['description'],
+                json_annotations['layer'],
+                json_annotations['startTimeUutc'],
+                json_annotations['endTimeUutc'])]
+        return annotations
 
     @deprecated
     def getChannelLabels(self):
@@ -220,6 +295,7 @@ class IeegConnectionError(Exception):
     """
     A simple exception for connectivity errors
     """
+
     def __init__(self, value):
         self.value = value
 

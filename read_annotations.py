@@ -45,7 +45,14 @@ session = Session(sys.argv[1], sys.argv[2])
 # We pick one dataset...
 dataset = session.open_dataset(sys.argv[3])
 
-layers = dataset.list_annotation_layers()
+layerToCount = dataset.list_annotation_layers()
+print(layerToCount)
+layers = [key for key, value in layerToCount.items() if value < 50]
 print(layers)
+
+for layer in layers:
+    annotations = dataset.get_annotations(layer)
+    print(annotations)
+    print(len(annotations))
 
 session.close_dataset(dataset)
