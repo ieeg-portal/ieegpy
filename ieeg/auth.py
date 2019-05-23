@@ -43,15 +43,18 @@ class Session:
     def url_builder(self, path):
         return Session.method + Session.host + Session.port + path
 
-    def create_ws_header(self, path, http_method, query, payload):
+    def create_ws_header(self, path, http_method, query=None, payload="", request_json=False):
         d_time = datetime.datetime.now().isoformat()
-        sig = self._signature_generator(path, http_method, query, payload, d_time)
-        return {'username': self.username, \
+        sig = self._signature_generator(path, http_method, d_time, query, payload)
+        headers = {'username': self.username, \
                 'timestamp': d_time, \
                 'signature': sig, \
-                'Content-Type': 'application/xml'};
+                'Content-Type': 'application/xml'}
+        if (request_json):
+            headers['Accept'] = 'application/json'
+        return headers
 
-    def _signature_generator(self, path, http_method, query, payload, d_time):
+    def _signature_generator(self, path, http_method, d_time, query=None, payload=""):
         """
         Signature Generator, used to authenticate user in portal
         """
@@ -59,7 +62,7 @@ class Session:
         m = hashlib.sha256()
 
         query_str = ""
-        if len(query):
+        if query:
             for k, v in query.items():
                 query_str += k + "=" + str(v) + "&"
             query_str = query_str[0:-1]

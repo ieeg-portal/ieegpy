@@ -70,7 +70,7 @@ class Dataset:
         details = ts_details.findall('details')[0]  #only one details in timeseriesdetails
         
         for dt in details.findall('detail'):
-            ET.dump(dt)
+            # ET.dump(dt)
             name = dt.findall('channelLabel')[0].text
             self.ch_labels.append(name)
             self.ts_array.append(dt)
@@ -178,6 +178,34 @@ class Dataset:
 
         array = self.get_data(start, duration, channels)
         return pd.DataFrame(array, columns=[self.ch_labels[i] for i in channels])
+
+    def list_annotation_layers(self):
+        """
+        Returns a dictionary mapping layer names to annotation count for this Dataset.
+        """
+
+        # Create request content        
+        req_path = "/services/timeseries/getCountsByLayer/" + self.snap_id
+        http_method = "GET"
+        payload = self.session.create_ws_header(req_path, http_method, request_json=True)
+        url_str = self.session.url_builder(req_path)
+        
+        # response to request 
+        r = requests.get(url_str, headers=payload, verify=False)
+        response_body = r.json()
+        if r.status_code != requests.codes.ok:
+            print(response_body)
+            raise IeegConnectionError('Could not get annotation layers for dataset')
+        countsByLayer = response_body['countsByLayer']['countsByLayer']
+        if not countsByLayer:
+            return {}
+        # If there is one layer, entry will be a dictionary. 
+        # If there is more than one, entry will be a list of dictionaries.
+        entry = countsByLayer['entry']
+        try:
+            return {entry['key']: entry['value']}
+        except TypeError:
+            return {e['key']: e['value'] for e in entry}
 
     @deprecated
     def getChannelLabels(self):
