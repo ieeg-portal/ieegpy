@@ -1,7 +1,7 @@
 # ieeg
 *A simple Python API for IEEG.org*
 
-**Authors: Joost B. Wagenaar, Zachary G. Ives, University of Pennsylvania**
+**Authors: Joost B. Wagenaar, Zachary G. Ives, John Frommeyer, University of Pennsylvania**
 
 This package allow users to stream data from the IEEG.org platform to their local Python environment.  An early iteration was developed in 2015, and it was substantially updated in 2019 to add greater functionality and to make it compatible with "modern" Python versions.  
 
