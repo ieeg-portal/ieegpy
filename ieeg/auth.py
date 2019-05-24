@@ -61,11 +61,12 @@ class Session:
 
         m = hashlib.sha256()
 
-        query_str = ""
+        queries = []
         if query:
             for k, v in query.items():
-                query_str += k + "=" + str(v) + "&"
-            query_str = query_str[0:-1]
+                if v is not None:
+                    queries.append(k + "=" + str(v))
+        query_str = "&".join(queries)
 
         m.update(payload.encode('utf-8'))
         payload_hash = base64.standard_b64encode(m.digest())
@@ -78,7 +79,6 @@ class Session:
                         query_str + "\n" +
                         d_time + "\n" +
                         payload_hash.decode('utf-8'))
-
         m2 = hashlib.sha256()
         m2.update(to_be_hashed.encode('utf-8'))
         return base64.standard_b64encode(m2.digest())

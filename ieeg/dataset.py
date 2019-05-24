@@ -60,11 +60,38 @@ class TimeSeriesDetails:
 class Annotation:
     """
     A timeseries annotation on the platform
+
+    Attributes:
+        parent: The Dataset to which this Annotation belongs
+        portal_id: The id of this Annotation
+        annotated: List of TimeSeriesDetails annotated by this Annotation
+        annotator: The creator of this Annotation
+        type: The type
+        description: The description
+        layer: The layer
+        start_time_offset_usec: The start time of this Annotations. In microseconds since the recording start.
+        end_time_offset_usec: The end time of this Annotation. In microseconds since the recording start.
     """
 
-    def __init__(self, portal_id, annotated, annotator, _type, description, layer, start_time_offset_usec, end_time_offset_usec):
+    def __init__(self, parent_dataset, portal_id, annotated_rev_ids, annotator, _type, description, layer, start_time_offset_usec, end_time_offset_usec):
+        """
+        Creates an Annotation
+
+        Args:
+            parent_dataset: The Dataset to which this Annotation belongs.
+            portal_id: The Annotation's id
+            annotated_rev_ids: Either a string or list of strings. The revision ids of the annotated time series.
+            annotator: The Annotation's creator
+            _type: The Annotation's type
+            description: The Annotation's description
+            layer: The Annotation's layer
+            start_time_offset_usec: The Annotation's start time. In microseconds since the start of recording
+            end_time_offset_usec: The Annotation's end time. In microseconds since the start of recording
+        """
+        self.parent = parent_dataset
         self.portal_id = str(portal_id)
-        self.annotated = annotated
+        self.annotated = [self.parent.ts_details_by_id[rev_id] for rev_id in (
+            [annotated_rev_ids] if isinstance(annotated_rev_ids, str) else annotated_rev_ids)]
         self.annotator = annotator
         self.type = _type
         self.description = description
@@ -93,7 +120,7 @@ class Dataset:
         details = ts_details.findall('details')[0]
 
         for dt in details.findall('detail'):
-            ET.dump(dt)
+            # ET.dump(dt)
             name = dt.findall('channelLabel')[0].text
             portal_id = dt.findall('revisionId')[0].text
             details = TimeSeriesDetails(portal_id,
@@ -212,7 +239,7 @@ class Dataset:
         array = self.get_data(start, duration, channels)
         return pd.DataFrame(array, columns=[self.ch_labels[i] for i in channels])
 
-    def list_annotation_layers(self):
+    def get_annotation_layers(self):
         """
         Returns a dictionary mapping layer names to annotation count for this Dataset.
         """
@@ -242,15 +269,20 @@ class Dataset:
         except TypeError:
             return {e['key']: e['value'] for e in entry}
 
-    def get_annotations(self, layer_name):
+    def get_annotations(self, layer_name, start_offfset_usecs=None, first_result=None, max_results=None):
+        """
+        Returns a list of annotations in the given layer ordered by start time.
+        """
+
         req_path = '/services/timeseries/getTsAnnotations/' + \
             self.snap_id + '/' + layer_name
         http_method = "GET"
-        payload = self.session.create_ws_header(
-            req_path, http_method, request_json=True)
-        url_str = self.session.url_builder(req_path)
+        params = {'startOffsetUsec' : start_offfset_usecs, 'firstResult': first_result, 'maxResults': max_results}
 
-        r = requests.get(url_str, headers=payload, verify=False)
+        payload = self.session.create_ws_header(
+            req_path, http_method, query=params, request_json=True)
+        url_str = self.session.url_builder(req_path)
+        r = requests.get(url_str, headers=payload, verify=False, params=params)
         response_body = r.json()
         if r.status_code != requests.codes.ok:
             print(response_body)
@@ -259,10 +291,12 @@ class Dataset:
 
         timeseries_annotations = response_body['timeseriesannotations']
         json_annotations = timeseries_annotations['annotations']['annotation']
+
         try:
             annotations = [Annotation(
+                self,
                 a['revId'],
-                [],
+                a['timeseriesRevIds']['timeseriesRevId'],
                 a['annotator'],
                 a['type'],
                 a['description'],
@@ -271,9 +305,12 @@ class Dataset:
                 a['endTimeUutc'])
                 for a in json_annotations]
         except TypeError:
+            # If there is only one annotation in the layer,
+            # json_annotations won't be a list. It'll be an annotation.
             annotations = [Annotation(
+                self,
                 json_annotations['revId'],
-                [],
+                json_annotations['timeseriesRevIds']['timeseriesRevId'],
                 json_annotations['annotator'],
                 json_annotations['type'],
                 json_annotations['description'],

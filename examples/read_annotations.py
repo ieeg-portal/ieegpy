@@ -36,23 +36,34 @@ from ieeg.auth import Session
 
 if len(sys.argv) < 4:
     print(
-        'Usage: read_annotations username password dataset_name')
+        'Usage: read_annotations username password dataset_name [layer_name]')
     sys.exit(1)
 
 print('Logging into IEEG:', sys.argv[1], '/ ****')
 session = Session(sys.argv[1], sys.argv[2])
 
-# We pick one dataset...
 dataset = session.open_dataset(sys.argv[3])
 
-layerToCount = dataset.list_annotation_layers()
-print(layerToCount)
-layers = [key for key, value in layerToCount.items() if value < 50]
-print(layers)
+layer_name = sys.argv[4] if len(sys.argv) > 4 else None
 
-for layer in layers:
-    annotations = dataset.get_annotations(layer)
-    print(annotations)
-    print(len(annotations))
+layerToCount = dataset.get_annotation_layers()
+
+if not layer_name:
+    print(layerToCount)
+else:
+    expected_count = layerToCount[layer_name]
+    actual_count = 0
+    max_results = None if expected_count < 100 else 100
+    call_count = 0
+    while actual_count < expected_count:
+        annotations = dataset.get_annotations(
+            layer_name, first_result=actual_count, max_results=max_results)
+        call_count += 1
+        actual_count += len(annotations)
+        first = annotations[0].start_time_offset_usec
+        last = annotations[-1].end_time_offset_usec
+        print("got ", len(annotations), " on call ",
+              call_count, " covering ", first, " usec to ", last, " usec")
+    print("got ", actual_count, " in total")
 
 session.close_dataset(dataset)
