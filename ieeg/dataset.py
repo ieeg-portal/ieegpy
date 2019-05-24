@@ -269,7 +269,7 @@ class Dataset:
         except TypeError:
             return {e['key']: e['value'] for e in entry}
 
-    def get_annotations(self, layer_name, start_offfset_usecs=None, first_result=None, max_results=None):
+    def get_annotations(self, layer_name, start_offset_usecs=None, first_result=None, max_results=None):
         """
         Returns a list of annotations in the given layer ordered by start time.
         """
@@ -277,7 +277,7 @@ class Dataset:
         req_path = '/services/timeseries/getTsAnnotations/' + \
             self.snap_id + '/' + layer_name
         http_method = "GET"
-        params = {'startOffsetUsec' : start_offfset_usecs, 'firstResult': first_result, 'maxResults': max_results}
+        params = {'startOffsetUsec' : start_offset_usecs, 'firstResult': first_result, 'maxResults': max_results}
 
         payload = self.session.create_ws_header(
             req_path, http_method, query=params, request_json=True)
