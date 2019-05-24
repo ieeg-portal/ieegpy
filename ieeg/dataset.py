@@ -78,15 +78,15 @@ class Annotation:
         Creates an Annotation
 
         Args:
-            parent_dataset: The Dataset to which this Annotation belongs.
-            portal_id: The Annotation's id
-            annotated_rev_ids: Either a string or list of strings. The revision ids of the annotated time series.
-            annotator: The Annotation's creator
-            _type: The Annotation's type
-            description: The Annotation's description
-            layer: The Annotation's layer
-            start_time_offset_usec: The Annotation's start time. In microseconds since the start of recording
-            end_time_offset_usec: The Annotation's end time. In microseconds since the start of recording
+            :param parent_dataset: The Dataset to which this Annotation belongs.
+            :param portal_id: The Annotation's id
+            :param annotated_rev_ids: Either a string or list of strings. The revision ids of the annotated time series.
+            :param annotator: The Annotation's creator
+            :param _type: The Annotation's type
+            :param description: The Annotation's description
+            :param layer: The Annotation's layer
+            :param start_time_offset_usec: The Annotation's start time. In microseconds since the start of recording
+            :param end_time_offset_usec: The Annotation's end time. In microseconds since the start of recording
         """
         self.parent = parent_dataset
         self.portal_id = str(portal_id)
@@ -242,6 +242,8 @@ class Dataset:
     def get_annotation_layers(self):
         """
         Returns a dictionary mapping layer names to annotation count for this Dataset.
+
+        :returns: a dictionary which maps layer names to annotation count for layer
         """
 
         # Create request content
@@ -272,12 +274,23 @@ class Dataset:
     def get_annotations(self, layer_name, start_offset_usecs=None, first_result=None, max_results=None):
         """
         Returns a list of annotations in the given layer ordered by start time.
+
+        Given a Dataset ds with no new annotations being added, if ds.get_annotations('my_layer') returns 152 annotations,
+        then ds.get_annotations('my_layer', max_results=100) will return the first 100 of those and 
+        ds.get_annotations('my_layer', first_result=100, max_results=100) will return the final 52.
+
+        :param layer_name: The annotation layer to return
+        :param start_offset_usec: If specified all returned annotations will have a start offset >= start_offset_usec
+        :param first_result: If specified, the zero-based index of the first annotation to return.
+        :param max_results: If specified, the maximum number of annotations to return.
+        :returns: a list of annotations in the given layer ordered by start offset.
         """
 
         req_path = '/services/timeseries/getTsAnnotations/' + \
             self.snap_id + '/' + layer_name
         http_method = "GET"
-        params = {'startOffsetUsec' : start_offset_usecs, 'firstResult': first_result, 'maxResults': max_results}
+        params = {'startOffsetUsec': start_offset_usecs,
+                  'firstResult': first_result, 'maxResults': max_results}
 
         payload = self.session.create_ws_header(
             req_path, http_method, query=params, request_json=True)
