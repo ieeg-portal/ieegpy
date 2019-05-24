@@ -33,6 +33,7 @@ You'll see that the sample program makes a connection to IEEG.org, fetches detai
 python setup.py build
 python setup.py install
 ```  
+You will need to install the library to run the programs in the `example` directory.
 
 ## Major Functionality
 
