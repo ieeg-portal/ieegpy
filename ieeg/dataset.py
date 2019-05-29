@@ -17,9 +17,11 @@
 import xml.etree.ElementTree as ET
 import datetime
 import requests
+import json
 import numpy as np
 import pandas as pd
 from deprecation import deprecated
+
 
 
 class TimeSeriesDetails:
@@ -73,25 +75,35 @@ class Annotation:
         end_time_offset_usec: The end time of this Annotation. In microseconds since the recording start.
     """
 
-    def __init__(self, parent_dataset, portal_id, annotated_rev_ids, annotator, _type, description, layer, start_time_offset_usec, end_time_offset_usec):
+    def __init__(self, parent_dataset, annotator, _type, description, layer, start_time_offset_usec, end_time_offset_usec, portal_id=None, annotated_labels=None, annotated_portal_ids=None):
         """
-        Creates an Annotation
+        Creates an Annotation.
+
+        Only one of annotated_labels or annotated_portal_ids need to be provided. 
+        If neither is provided, then this Annotation will annotate all the channels in parent_dataset.
 
         Args:
             :param parent_dataset: The Dataset to which this Annotation belongs.
-            :param portal_id: The Annotation's id
-            :param annotated_rev_ids: Either a string or list of strings. The revision ids of the annotated time series.
             :param annotator: The Annotation's creator
             :param _type: The Annotation's type
             :param description: The Annotation's description
             :param layer: The Annotation's layer
             :param start_time_offset_usec: The Annotation's start time. In microseconds since the start of recording
             :param end_time_offset_usec: The Annotation's end time. In microseconds since the start of recording
+            :param portal_id: The Annotation's id. Should be left as None for new Annotations.
+            :param annotated_labels: Either a string or list of strings. The labels of the annotated TimeSeriesDetails.
+            :param annotated_portal_ids: Either a string or list of strings. The portal_ids of the annotated TimeSeriesDetails.
         """
         self.parent = parent_dataset
-        self.portal_id = str(portal_id)
-        self.annotated = [self.parent.ts_details_by_id[rev_id] for rev_id in (
-            [annotated_rev_ids] if isinstance(annotated_rev_ids, str) else annotated_rev_ids)]
+        self.portal_id = str(portal_id) if portal_id else None
+        if annotated_labels:
+            self.annotated = [self.parent.ts_details[label] for label in (
+                [annotated_labels] if isinstance(annotated_labels, str) else annotated_labels)]
+        elif annotated_portal_ids:
+            self.annotated = [self.parent.ts_details_by_id[rev_id] for rev_id in (
+                [annotated_portal_ids] if isinstance(annotated_portal_ids, str) else annotated_portal_ids)]
+        else:
+            self.annotated = list(self.parent.ts_details.values())
         self.annotator = annotator
         self.type = _type
         self.description = description
@@ -296,41 +308,92 @@ class Dataset:
             req_path, http_method, query=params, request_json=True)
         url_str = self.session.url_builder(req_path)
         r = requests.get(url_str, headers=payload, verify=False, params=params)
-        response_body = r.json()
         if r.status_code != requests.codes.ok:
-            print(response_body)
+            print(r.text)
             raise IeegConnectionError(
                 'Could not get annotation layer ' + layer_name)
-
+        response_body = r.json()
         timeseries_annotations = response_body['timeseriesannotations']
         json_annotations = timeseries_annotations['annotations']['annotation']
 
         try:
             annotations = [Annotation(
                 self,
-                a['revId'],
-                a['timeseriesRevIds']['timeseriesRevId'],
                 a['annotator'],
                 a['type'],
-                a['description'],
+                a.get('description', ''),
                 a['layer'],
                 a['startTimeUutc'],
-                a['endTimeUutc'])
+                a['endTimeUutc'],
+                portal_id=a['revId'],
+                annotated_portal_ids=a['timeseriesRevIds']['timeseriesRevId'])
                 for a in json_annotations]
         except TypeError:
             # If there is only one annotation in the layer,
             # json_annotations won't be a list. It'll be an annotation.
             annotations = [Annotation(
                 self,
-                json_annotations['revId'],
-                json_annotations['timeseriesRevIds']['timeseriesRevId'],
                 json_annotations['annotator'],
                 json_annotations['type'],
-                json_annotations['description'],
+                json_annotations.get('description', ''),
                 json_annotations['layer'],
                 json_annotations['startTimeUutc'],
-                json_annotations['endTimeUutc'])]
+                json_annotations['endTimeUutc'],
+                portal_id=json_annotations['revId'],
+                annotated_portal_ids=json_annotations['timeseriesRevIds']['timeseriesRevId'])]
         return annotations
+
+    def add_annotations(self, annotations):
+        """
+        Adds a collection of Annotations to this dataset.
+        """
+
+        ## request_body is oddly verbose because it was originally designed as XML.
+        ts_revids = set()
+        ts_annotations = []
+        for a in annotations:
+            if a.parent != self:
+                raise ValueError(
+                    'Annotation does not belong to this dataset. It belongs to dataset ' + a.parent.snap_id)
+            annotated_revids = [detail.portal_id for detail in a.annotated]
+            ts_annotation = {
+                'timeseriesRevIds': {'timeseriesRevId': annotated_revids},
+                'annotator': a.annotator,
+                'type': a.type,
+                'description': a.description,
+                'layer': a.layer,
+                'startTimeUutc': a.start_time_offset_usec,
+                'endTimeUutc': a.end_time_offset_usec
+            }
+            if a.portal_id:
+                ts_annotation['revId'] = a.portal_id
+            ts_annotations.append(ts_annotation)
+            ts_revids.update(annotated_revids)
+
+        timeseries = [{'revId': ts_revid, 'label': self.ts_details_by_id[ts_revid].channel_label}
+                      for ts_revid in ts_revids]
+        request_body = {'timeseriesannotations': {
+            'timeseries': {
+                'timeseries': timeseries
+            },
+            'annotations': {
+                'annotation': ts_annotations
+            }
+        }}
+        req_path = '/services/timeseries/addAnnotationsToDataSnapshot/' + \
+            self.snap_id
+        http_method = 'POST'
+
+        payload = self.session.create_ws_header(
+            req_path, http_method, payload=json.dumps(request_body), request_json=True)
+        url_str = self.session.url_builder(req_path)
+        r = requests.post(url_str, headers=payload,
+                          json=request_body, verify=False)
+        if r.status_code != requests.codes.ok:
+            response_body = r.text
+            print(response_body)
+            raise IeegConnectionError(
+                'Could not add annotations')
 
     @deprecated
     def getChannelLabels(self):

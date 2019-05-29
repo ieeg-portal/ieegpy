@@ -52,6 +52,7 @@ class Session:
                 'Content-Type': 'application/xml'}
         if (request_json):
             headers['Accept'] = 'application/json'
+            headers['Content-Type'] = 'application/json'
         return headers
 
     def _signature_generator(self, path, http_method, d_time, query=None, payload=""):
