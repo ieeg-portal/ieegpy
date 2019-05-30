@@ -17,36 +17,38 @@
 ##################################################################################
 
 import sys
+
 from ieeg.auth import Session
-from ieeg.dataset import Annotation
 
 
 def main(args):
-    """
-    Adds some annotations to the given dataset
-    """
-    
     if len(args) < 4:
         print(
-            'Usage: add_annotations username password dataset_name')
+            'Usage: move_annotation_layer username password dataset_name [from_layer] [to_layer]')
         sys.exit(1)
 
     user = args[1]
     print('Logging into IEEG:', user, '/ ****')
-    #Session.method = 'http://'
-    #Session.host = '127.0.0.1'
-    #Session.port = ':8888'
+#    Session.method = 'http://'
+#    Session.host = '127.0.0.1'
+#    Session.port = ':8888'
     session = Session(user, args[2])
 
     dataset = session.open_dataset(args[3])
 
-    annotations = [Annotation(dataset, user,
-                              'Test', 'A test annotation', 'Test Layer', 100000, 200100),
-                   Annotation(dataset, user,
-                              'Test 2', 'A test annotation', 'Test Layer', 200000, 300200)]
+    layer_name = args[4] if len(args) > 4 else None
 
-    dataset.add_annotations(annotations)
+    layer_to_count = dataset.get_annotation_layers()
 
+    if not layer_name:
+        print(layer_to_count)
+    else:
+        new_layer = args[5]
+        print('Moving', layer_to_count[layer_name],
+              'annotations from', layer_name, 'to', new_layer)
+        moved = dataset.move_annotation_layer(layer_name, new_layer)
+        print('Moved', moved, 'annotations')
+        print(dataset.get_annotation_layers())
     session.close_dataset(dataset)
 
 

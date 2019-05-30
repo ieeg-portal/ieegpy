@@ -66,8 +66,8 @@ class Session:
         if query:
             for k, v in query.items():
                 if v is not None:
-                    queries.append(k + "=" + str(v))
-        query_str = "&".join(queries)
+                    queries.append((k, str(v)))
+        query_str = requests.compat.urlencode(queries, doseq=True)
 
         m.update(payload.encode('utf-8'))
         payload_hash = base64.standard_b64encode(m.digest())
@@ -129,7 +129,7 @@ class Session:
     # For backward-compatibility
     @deprecated
     def urlBuilder(self, path):
-        return Session.url_builder(path)
+        return self.url_builder(path)
 
     @deprecated
     def openDataset(self, name):

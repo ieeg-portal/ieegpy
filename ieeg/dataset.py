@@ -15,13 +15,11 @@
 ##################################################################################
 
 import xml.etree.ElementTree as ET
-import datetime
-import requests
 import json
+import requests
 import numpy as np
 import pandas as pd
 from deprecation import deprecated
-
 
 
 class TimeSeriesDetails:
@@ -71,16 +69,21 @@ class Annotation:
         type: The type
         description: The description
         layer: The layer
-        start_time_offset_usec: The start time of this Annotations. In microseconds since the recording start.
-        end_time_offset_usec: The end time of this Annotation. In microseconds since the recording start.
+        start_time_offset_usec: The start time of this Annotations.
+                                In microseconds since the recording start.
+        end_time_offset_usec: The end time of this Annotation. 
+                              In microseconds since the recording start.
     """
 
-    def __init__(self, parent_dataset, annotator, _type, description, layer, start_time_offset_usec, end_time_offset_usec, portal_id=None, annotated_labels=None, annotated_portal_ids=None):
+    def __init__(self, parent_dataset, annotator, _type, description, layer,
+                 start_time_offset_usec, end_time_offset_usec,
+                 portal_id=None, annotated_labels=None, annotated_portal_ids=None):
         """
         Creates an Annotation.
 
-        Only one of annotated_labels or annotated_portal_ids need to be provided. 
-        If neither is provided, then this Annotation will annotate all the channels in parent_dataset.
+        Only one of annotated_labels or annotated_portal_ids need to be provided.
+        If neither is provided, then this Annotation will annotate all the channels
+        in parent_dataset.
 
         Args:
             :param parent_dataset: The Dataset to which this Annotation belongs.
@@ -88,11 +91,15 @@ class Annotation:
             :param _type: The Annotation's type
             :param description: The Annotation's description
             :param layer: The Annotation's layer
-            :param start_time_offset_usec: The Annotation's start time. In microseconds since the start of recording
-            :param end_time_offset_usec: The Annotation's end time. In microseconds since the start of recording
+            :param start_time_offset_usec: The Annotation's start time.
+                                           In microseconds since the start of recording
+            :param end_time_offset_usec: The Annotation's end time.
+                                         In microseconds since the start of recording
             :param portal_id: The Annotation's id. Should be left as None for new Annotations.
-            :param annotated_labels: Either a string or list of strings. The labels of the annotated TimeSeriesDetails.
-            :param annotated_portal_ids: Either a string or list of strings. The portal_ids of the annotated TimeSeriesDetails.
+            :param annotated_labels: The labels of the annotated TimeSeriesDetails.
+                                     Either a string or list of strings.
+            :param annotated_portal_ids: The portal_ids of the annotated TimeSeriesDetails.
+                                         Either a string or list of strings/
         """
         self.parent = parent_dataset
         self.portal_id = str(portal_id) if portal_id else None
@@ -126,6 +133,7 @@ class Dataset:
     ts_array = []   # Channel
 
     def __init__(self, ts_details, snapshot_id, parent):
+        # type: (xml.etree.Element, str, ieeg.auth.Session) -> None
         self.session = parent
         self.snap_id = snapshot_id
         # only one details in timeseriesdetails
@@ -348,7 +356,7 @@ class Dataset:
         Adds a collection of Annotations to this dataset.
         """
 
-        ## request_body is oddly verbose because it was originally designed as XML.
+        # request_body is oddly verbose because it was originally designed as XML.
         ts_revids = set()
         ts_annotations = []
         for a in annotations:
@@ -394,6 +402,32 @@ class Dataset:
             print(response_body)
             raise IeegConnectionError(
                 'Could not add annotations')
+
+    def move_annotation_layer(self, from_layer, to_layer):
+        """
+        Moves an annotation layer to a new layer
+        """
+
+        req_path = '/services/timeseries/datasets/'\
+            + self.snap_id\
+            + '/tsAnnotations/'\
+            + from_layer
+        url_str = self.session.url_builder(req_path)
+
+        query_params = {'toLayerName': to_layer}
+        http_method = 'POST'
+        headers = self.session.create_ws_header(
+            req_path, http_method, query=query_params, request_json=True)
+
+        response = requests.post(url_str, headers=headers, params=query_params, verify=False)
+        if response.status_code != requests.codes.ok:
+            response_body = response.text
+            print(response_body)
+            raise IeegConnectionError(
+                'Could not move annotation layer ' + from_layer + ' to ' + to_layer)
+        response_body = response.json()
+        moved = response_body['tsAnnotationsMoved']['moved']
+        return int(moved)
 
     @deprecated
     def getChannelLabels(self):

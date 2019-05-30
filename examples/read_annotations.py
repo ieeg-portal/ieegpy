@@ -19,36 +19,46 @@
 import sys
 from ieeg.auth import Session
 
-if len(sys.argv) < 4:
-    print(
-        'Usage: read_annotations username password dataset_name [layer_name]')
-    sys.exit(1)
 
-print('Logging into IEEG:', sys.argv[1], '/ ****')
-session = Session(sys.argv[1], sys.argv[2])
+def main(args):
+    """
+    Prints the names of annotation layers on the given dataset if no layer_name is supplied. 
+    Else fetches all annotations in the given layer.
+    """
+    if len(args) < 4:
+        print(
+            'Usage: read_annotations username password dataset_name [layer_name]')
+        sys.exit(1)
 
-dataset = session.open_dataset(sys.argv[3])
+    print('Logging into IEEG:', args[1], '/ ****')
+    session = Session(args[1], args[2])
 
-layer_name = sys.argv[4] if len(sys.argv) > 4 else None
+    dataset = session.open_dataset(args[3])
 
-layer_to_count = dataset.get_annotation_layers()
+    layer_name = args[4] if len(args) > 4 else None
 
-if not layer_name:
-    print(layer_to_count)
-else:
-    expected_count = layer_to_count[layer_name]
-    actual_count = 0
-    max_results = None if expected_count < 100 else 100
-    call_number = 0
-    while actual_count < expected_count:
-        annotations = dataset.get_annotations(
-            layer_name, first_result=actual_count, max_results=max_results)
-        call_number += 1
-        actual_count += len(annotations)
-        first = annotations[0].start_time_offset_usec
-        last = annotations[-1].end_time_offset_usec
-        print("got", len(annotations), "annotations on call #",
-              call_number, "covering", first, "usec to", last, "usec")
-    print("got", actual_count, "annotations in total")
+    layer_to_count = dataset.get_annotation_layers()
 
-session.close_dataset(dataset)
+    if not layer_name:
+        print(layer_to_count)
+    else:
+        expected_count = layer_to_count[layer_name]
+        actual_count = 0
+        max_results = None if expected_count < 100 else 100
+        call_number = 0
+        while actual_count < expected_count:
+            annotations = dataset.get_annotations(
+                layer_name, first_result=actual_count, max_results=max_results)
+            call_number += 1
+            actual_count += len(annotations)
+            first = annotations[0].start_time_offset_usec
+            last = annotations[-1].end_time_offset_usec
+            print("got", len(annotations), "annotations on call #",
+                  call_number, "covering", first, "usec to", last, "usec")
+        print("got", actual_count, "annotations in total")
+
+    session.close_dataset(dataset)
+
+
+if __name__ == "__main__":
+    main(sys.argv)
