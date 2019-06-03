@@ -207,7 +207,7 @@ class Dataset:
             if i in channels:
                 el1 = ET.SubElement(wrapper2, 'timeSeriesIdAndCheck')
                 el2 = ET.SubElement(el1, 'dataCheck')
-                el2.text = ts.findall('revisionId')[0].text
+                el2.text = ts.findall('dataCheck')[0].text
                 el3 = ET.SubElement(el1, 'id')
                 el3.text = ts.findall('revisionId')[0].text
             i += 1
@@ -227,7 +227,6 @@ class Dataset:
         # response to request
         r = requests.post(url_str, headers=payload,
                           params=params, data=data, verify=False)
-
         # collect data in numpy array
         d = np.fromstring(r.content, dtype='>i4')
         h = r.headers
@@ -405,7 +404,9 @@ class Dataset:
 
     def move_annotation_layer(self, from_layer, to_layer):
         """
-        Moves an annotation layer to a new layer
+        Moves all annotations in layer from_layer to layer to_layer.
+
+        :returns: the number of moved annotations.
         """
 
         req_path = '/services/timeseries/datasets/'\
@@ -428,6 +429,33 @@ class Dataset:
         response_body = response.json()
         moved = response_body['tsAnnotationsMoved']['moved']
         return int(moved)
+
+    def delete_annotation_layer(self, layer):
+        """
+        Deletes all annotations in the given layer.
+
+        :returns: the number of deleted annotations.
+        """
+
+        req_path = '/services/timeseries/removeTsAnnotationsByLayer/'\
+            + self.snap_id\
+            + '/'\
+            + layer
+        url_str = self.session.url_builder(req_path)
+
+        http_method = 'POST'
+        headers = self.session.create_ws_header(
+            req_path, http_method, request_json=True)
+
+        response = requests.post(url_str, headers=headers, verify=False)
+        if response.status_code != requests.codes.ok:
+            response_body = response.text
+            print(response_body)
+            raise IeegConnectionError(
+                'Could not delete annotation layer ' + layer)
+        response_body = response.json()
+        deleted = response_body['tsAnnotationsDeleted']['noDeleted']
+        return int(deleted)
 
     @deprecated
     def getChannelLabels(self):

@@ -24,7 +24,7 @@ from ieeg.auth import Session
 def main(args):
     if len(args) < 4:
         print(
-            'Usage: move_annotation_layer username password dataset_name [from_layer] [to_layer]')
+            'Usage: delete_annotation_layer username password dataset_name [layer]')
         sys.exit(1)
 
     user = args[1]
@@ -43,11 +43,10 @@ def main(args):
     if not layer_name:
         print(layer_to_count)
     else:
-        new_layer = args[5]
-        print('Moving', layer_to_count[layer_name],
-              'annotations from', layer_name, 'to', new_layer)
-        moved = dataset.move_annotation_layer(layer_name, new_layer)
-        print('Moved', moved, 'annotations')
+        print('Deleting', layer_to_count[layer_name],
+              'annotations from', layer_name)
+        deleted = dataset.delete_annotation_layer(layer_name)
+        print('Deleted', deleted, 'annotations')
         print(dataset.get_annotation_layers())
     session.close_dataset(dataset)
 
