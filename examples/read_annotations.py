@@ -31,6 +31,9 @@ def main(args):
         sys.exit(1)
 
     print('Logging into IEEG:', args[1], '/ ****')
+    #Session.method = 'http://'
+    #Session.host = '127.0.0.1'
+    #Session.port = ':8888'
     session = Session(args[1], args[2])
 
     dataset = session.open_dataset(args[3])
@@ -58,6 +61,7 @@ def main(args):
         print("got", actual_count, "annotations in total")
 
     session.close_dataset(dataset)
+    session.close()
 
 
 if __name__ == "__main__":

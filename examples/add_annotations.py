@@ -48,6 +48,7 @@ def main(args):
     dataset.add_annotations(annotations)
 
     session.close_dataset(dataset)
+    session.close()
 
 
 if __name__ == "__main__":

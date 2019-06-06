@@ -16,13 +16,12 @@
 
 
 import hashlib
-import base64
-import datetime
-import requests
 import xml.etree.ElementTree as ET
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-from ieeg.dataset import Dataset as DS, IeegConnectionError
+import requests
 from deprecation import deprecated
+from ieeg.dataset import Dataset as DS, IeegConnectionError
+from ieeg.ieeg_auth import IeegAuth
+from ieeg.ieeg_api import IeegApi
 
 class Session:
     """
@@ -32,91 +31,42 @@ class Session:
     port = ""
     method = 'https://'
 
-    username = ""
-    password = ""
-
     def __init__(self, name, pwd):
-        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
         self.username = name
         self.password = md5(pwd)
+        self.auth_for_json_req = IeegAuth(self.username, self.password, request_json=True)
+        self.auth_for_xml_req = IeegAuth(self.username, self.password)
+        self.http = requests.Session()
+        self.api = IeegApi(self.http, self.auth_for_xml_req)
+
+    def close(self):
+        self.api.close()
 
     def url_builder(self, path):
         return Session.method + Session.host + Session.port + path
-
-    def create_ws_header(self, path, http_method, query=None, payload="", request_json=False):
-        d_time = datetime.datetime.now().isoformat()
-        sig = self._signature_generator(path, http_method, d_time, query, payload)
-        headers = {'username': self.username, \
-                'timestamp': d_time, \
-                'signature': sig, \
-                'Content-Type': 'application/xml'}
-        if (request_json):
-            headers['Accept'] = 'application/json'
-            headers['Content-Type'] = 'application/json'
-        return headers
-
-    def _signature_generator(self, path, http_method, d_time, query=None, payload=""):
-        """
-        Signature Generator, used to authenticate user in portal
-        """
-
-        m = hashlib.sha256()
-
-        queries = []
-        if query:
-            for k, v in query.items():
-                if v is not None:
-                    queries.append((k, str(v)))
-        query_str = requests.compat.urlencode(queries, doseq=True)
-
-        m.update(payload.encode('utf-8'))
-        payload_hash = base64.standard_b64encode(m.digest())
-
-        to_be_hashed = (self.username + "\n" +
-                        self.password + "\n" +
-                        http_method + "\n" +
-                        self.host + "\n" +
-                        path + "\n" +
-                        query_str + "\n" +
-                        d_time + "\n" +
-                        payload_hash.decode('utf-8'))
-        m2 = hashlib.sha256()
-        m2.update(to_be_hashed.encode('utf-8'))
-        return base64.standard_b64encode(m2.digest())
 
     def open_dataset(self, name):
         """
         Return a dataset object
         """
 
-        # Request location
-        get_id_by_snap_name_path = "/services/timeseries/getIdByDataSnapshotName/"
-
-        # Create request content
-        http_method = "GET"
-        req_path = get_id_by_snap_name_path + name
-        payload = self.create_ws_header(req_path, http_method, "", "")
-        url = Session.method + Session.host + Session.port + req_path
-
-        r = requests.get(url, headers=payload, verify=False)
+        get_id_response = self.api.get_dataset_id_by_name(name)
 
         # Check response
-        if r.status_code != 200:
-            print(r.text)
+        if get_id_response.status_code != 200:
+            print(get_id_response.text)
             raise IeegConnectionError('Authorization failed or cannot find study ' + name)
 
-        # Request location
-        get_time_series_url = '/services/timeseries/getDataSnapshotTimeSeriesDetails/'
+        snapshot_id = get_id_response.text
 
-        # Create request content
-        snapshot_id = r.text
-        req_path = get_time_series_url + snapshot_id
-        payload = self.create_ws_header(req_path, http_method, "", "")
-        url = Session.method + Session.host + Session.port + req_path
-        r = requests.get(url, headers=payload, verify=False)
+        time_series_details_response = self.api.get_time_series_details(snapshot_id)
+
+        if time_series_details_response.status_code != 200:
+            print(time_series_details_response.text)
+            raise IeegConnectionError('Authorization failed or cannot get time series details for ' + name)
 
         # Return Habitat Dataset object
-        return DS(ET.fromstring(r.text), snapshot_id, self)
+        return DS(ET.fromstring(time_series_details_response.text), snapshot_id, self)
 
     def close_dataset(self, ds):
         """
@@ -134,11 +84,6 @@ class Session:
     @deprecated
     def openDataset(self, name):
         return self.open_dataset(name)
-
-    @deprecated
-    def _createWSHeader(self, path, http_method, query, payload):
-        return self.create_ws_header(path, http_method, query, payload)
-
 
 def md5(user_string):
     """

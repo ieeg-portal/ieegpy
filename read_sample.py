@@ -70,3 +70,4 @@ overall = ProcessSlidingWindowAcrossChannels.execute_with_provenance(ds, ['LEFT_
 print (overall.shape, overall)
 
 s.close_dataset(ds)
+s.close()

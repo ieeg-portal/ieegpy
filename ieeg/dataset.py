@@ -14,8 +14,6 @@
 # limitations under the License.
 ##################################################################################
 
-import xml.etree.ElementTree as ET
-import json
 import requests
 import numpy as np
 import pandas as pd
@@ -196,40 +194,9 @@ class Dataset:
         def all_same(items):
             return all(x == items[0] for x in items)
 
-        # Request location
-        get_data_str = "/services/timeseries/getUnscaledTimeSeriesSetBinaryRaw/"
-
-        # Build Data Content XML
-        wrapper1 = ET.Element('timeSeriesIdAndDChecks')
-        wrapper2 = ET.SubElement(wrapper1, 'timeSeriesIdAndDChecks')
-        i = 0
-        for ts in self.ts_array:
-            if i in channels:
-                el1 = ET.SubElement(wrapper2, 'timeSeriesIdAndCheck')
-                el2 = ET.SubElement(el1, 'dataCheck')
-                el2.text = ts.findall('dataCheck')[0].text
-                el3 = ET.SubElement(el1, 'id')
-                el3.text = ts.findall('revisionId')[0].text
-            i += 1
-
-        data = ET.tostring(wrapper1, encoding="us-ascii",
-                           method="xml").decode('utf-8')
-        data = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>' + data
-
-        # Create request content
-        req_path = get_data_str + self.snap_id
-        http_method = "POST"
-        params = {'start': start, 'duration': duration}
-        payload = self.session.create_ws_header(
-            req_path, http_method, params, data)
-        url_str = self.session.url_builder(req_path)
-
-        # response to request
-        r = requests.post(url_str, headers=payload,
-                          params=params, data=data, verify=False)
+        r = self.session.api.get_data(self, start, duration, channels)
         # collect data in numpy array
         d = np.fromstring(r.content, dtype='>i4')
-        h = r.headers
 
         # Check all channels are the same length
         sample_per_row = [int(numeric_string)
@@ -265,20 +232,14 @@ class Dataset:
         :returns: a dictionary which maps layer names to annotation count for layer
         """
 
-        # Create request content
-        req_path = "/services/timeseries/getCountsByLayer/" + self.snap_id
-        http_method = "GET"
-        payload = self.session.create_ws_header(
-            req_path, http_method, request_json=True)
-        url_str = self.session.url_builder(req_path)
-
         # response to request
-        r = requests.get(url_str, headers=payload, verify=False)
-        response_body = r.json()
-        if r.status_code != requests.codes.ok:
-            print(response_body)
+        response = self.session.api.get_annotation_layers(self)
+        if response.status_code != requests.codes.ok:
+            print(response.text)
             raise IeegConnectionError(
                 'Could not get annotation layers for dataset')
+
+        response_body = response.json()  
         counts_by_layer = response_body['countsByLayer']['countsByLayer']
         if not counts_by_layer:
             return {}
@@ -290,7 +251,8 @@ class Dataset:
         except TypeError:
             return {e['key']: e['value'] for e in entry}
 
-    def get_annotations(self, layer_name, start_offset_usecs=None, first_result=None, max_results=None):
+    def get_annotations(self, layer_name,
+                        start_offset_usecs=None, first_result=None, max_results=None):
         """
         Returns a list of annotations in the given layer ordered by start time.
 
@@ -305,21 +267,15 @@ class Dataset:
         :returns: a list of annotations in the given layer ordered by start offset.
         """
 
-        req_path = '/services/timeseries/getTsAnnotations/' + \
-            self.snap_id + '/' + layer_name
-        http_method = "GET"
-        params = {'startOffsetUsec': start_offset_usecs,
-                  'firstResult': first_result, 'maxResults': max_results}
-
-        payload = self.session.create_ws_header(
-            req_path, http_method, query=params, request_json=True)
-        url_str = self.session.url_builder(req_path)
-        r = requests.get(url_str, headers=payload, verify=False, params=params)
-        if r.status_code != requests.codes.ok:
-            print(r.text)
+        response = self.session.api.get_annotations(self, layer_name,
+                                                    start_offset_usecs=start_offset_usecs,
+                                                    first_result=first_result,
+                                                    max_results=max_results)
+        if response.status_code != requests.codes.ok:
+            print(response.text)
             raise IeegConnectionError(
                 'Could not get annotation layer ' + layer_name)
-        response_body = r.json()
+        response_body = response.json()
         timeseries_annotations = response_body['timeseriesannotations']
         json_annotations = timeseries_annotations['annotations']['annotation']
 
@@ -354,50 +310,9 @@ class Dataset:
         """
         Adds a collection of Annotations to this dataset.
         """
-
-        # request_body is oddly verbose because it was originally designed as XML.
-        ts_revids = set()
-        ts_annotations = []
-        for a in annotations:
-            if a.parent != self:
-                raise ValueError(
-                    'Annotation does not belong to this dataset. It belongs to dataset ' + a.parent.snap_id)
-            annotated_revids = [detail.portal_id for detail in a.annotated]
-            ts_annotation = {
-                'timeseriesRevIds': {'timeseriesRevId': annotated_revids},
-                'annotator': a.annotator,
-                'type': a.type,
-                'description': a.description,
-                'layer': a.layer,
-                'startTimeUutc': a.start_time_offset_usec,
-                'endTimeUutc': a.end_time_offset_usec
-            }
-            if a.portal_id:
-                ts_annotation['revId'] = a.portal_id
-            ts_annotations.append(ts_annotation)
-            ts_revids.update(annotated_revids)
-
-        timeseries = [{'revId': ts_revid, 'label': self.ts_details_by_id[ts_revid].channel_label}
-                      for ts_revid in ts_revids]
-        request_body = {'timeseriesannotations': {
-            'timeseries': {
-                'timeseries': timeseries
-            },
-            'annotations': {
-                'annotation': ts_annotations
-            }
-        }}
-        req_path = '/services/timeseries/addAnnotationsToDataSnapshot/' + \
-            self.snap_id
-        http_method = 'POST'
-
-        payload = self.session.create_ws_header(
-            req_path, http_method, payload=json.dumps(request_body), request_json=True)
-        url_str = self.session.url_builder(req_path)
-        r = requests.post(url_str, headers=payload,
-                          json=request_body, verify=False)
-        if r.status_code != requests.codes.ok:
-            response_body = r.text
+        response = self.session.api.add_annotations(self, annotations)
+        if response.status_code != requests.codes.ok:
+            response_body = response.text
             print(response_body)
             raise IeegConnectionError(
                 'Could not add annotations')
@@ -408,19 +323,7 @@ class Dataset:
 
         :returns: the number of moved annotations.
         """
-
-        req_path = '/services/timeseries/datasets/'\
-            + self.snap_id\
-            + '/tsAnnotations/'\
-            + from_layer
-        url_str = self.session.url_builder(req_path)
-
-        query_params = {'toLayerName': to_layer}
-        http_method = 'POST'
-        headers = self.session.create_ws_header(
-            req_path, http_method, query=query_params, request_json=True)
-
-        response = requests.post(url_str, headers=headers, params=query_params, verify=False)
+        response = self.session.api.move_annotation_layer(self, from_layer, to_layer)
         if response.status_code != requests.codes.ok:
             response_body = response.text
             print(response_body)
@@ -436,18 +339,7 @@ class Dataset:
 
         :returns: the number of deleted annotations.
         """
-
-        req_path = '/services/timeseries/removeTsAnnotationsByLayer/'\
-            + self.snap_id\
-            + '/'\
-            + layer
-        url_str = self.session.url_builder(req_path)
-
-        http_method = 'POST'
-        headers = self.session.create_ws_header(
-            req_path, http_method, request_json=True)
-
-        response = requests.post(url_str, headers=headers, verify=False)
+        response = self.session.api.delete_annotation_layer(self, layer)
         if response.status_code != requests.codes.ok:
             response_body = response.text
             print(response_body)

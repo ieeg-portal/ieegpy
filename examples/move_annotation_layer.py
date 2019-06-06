@@ -50,6 +50,7 @@ def main(args):
         print('Moved', moved, 'annotations')
         print(dataset.get_annotation_layers())
     session.close_dataset(dataset)
+    session.close()
 
 
 if __name__ == "__main__":
