@@ -15,12 +15,9 @@
 ##################################################################################
 
 
-import hashlib
 import xml.etree.ElementTree as ET
-import requests
 from deprecation import deprecated
 from ieeg.dataset import Dataset as DS, IeegConnectionError
-from ieeg.ieeg_auth import IeegAuth
 from ieeg.ieeg_api import IeegApi
 
 class Session:
@@ -31,17 +28,27 @@ class Session:
     port = ""
     method = 'https://'
 
-    def __init__(self, name, pwd):
+    def __init__(self, name, pwd, verify_ssl=True):
         self.username = name
-        self.password = md5(pwd)
-        self.auth_for_json_req = IeegAuth(self.username, self.password, request_json=True)
-        self.auth_for_xml_req = IeegAuth(self.username, self.password)
-        self.http = requests.Session()
-        self.api = IeegApi(self.http, self.auth_for_xml_req)
+        use_https = Session.method.startswith('https')
+        # Session.url_builder requires Session.port == ':8080' to use port 8080.
+        # But there shouldn't be anyone calling url_builder anyway.
+        port = Session.port[1:] if Session.port.startswith(
+            ':') else Session.port
+        self.api = IeegApi(self.username, pwd,
+                           use_https=use_https, host=Session.host, port=port, verify_ssl=verify_ssl)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.close()
+
 
     def close(self):
         self.api.close()
 
+    @deprecated
     def url_builder(self, path):
         return Session.method + Session.host + Session.port + path
 
@@ -84,13 +91,3 @@ class Session:
     @deprecated
     def openDataset(self, name):
         return self.open_dataset(name)
-
-def md5(user_string):
-    """
-    Return MD5 hashed string
-    """
-    m = hashlib.md5()
-    m.update(user_string.encode('utf-8'))
-    return m.hexdigest()
-
-

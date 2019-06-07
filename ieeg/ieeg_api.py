@@ -15,7 +15,7 @@
 '''
 import xml.etree.ElementTree as ET
 import requests
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from ieeg.ieeg_auth import IeegAuth
 
 
 class IeegApi:
@@ -23,9 +23,9 @@ class IeegApi:
     The IEEG REST API
     """
 
-    _get_id_by_dataset_name_url = "/timeseries/getIdByDataSnapshotName/"
-    _get_time_series_details_url = '/timeseries/getDataSnapshotTimeSeriesDetails/'
-    _get_counts_by_layer_url = '/timeseries/getCountsByLayer/'
+    _get_id_by_dataset_name_path = "/timeseries/getIdByDataSnapshotName/"
+    _get_time_series_details_path = '/timeseries/getDataSnapshotTimeSeriesDetails/'
+    _get_counts_by_layer_path = '/timeseries/getCountsByLayer/'
     _get_annotations_path = '/timeseries/getTsAnnotations/'
     _get_data_path = '/timeseries/getUnscaledTimeSeriesSetBinaryRaw/'
     _add_annotations_path = '/timeseries/addAnnotationsToDataSnapshot/'
@@ -38,13 +38,12 @@ class IeegApi:
     _send_accept_json = {
         'Content-Type': 'application/json', 'Accept': 'application/json'}
 
-    def __init__(self, http, auth, use_ssl=True, host='www.ieeg.org', port=None):
-        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-        self.http = http
-        self.auth = auth
-        self.http.auth = self.auth
-        self.http.verify = False
-        self.scheme = 'https' if use_ssl else 'http'
+    def __init__(self, username, password,
+                 use_https=True, host='www.ieeg.org', port=None, verify_ssl=True):
+        self.http = requests.Session()
+        self.http.auth = IeegAuth(username, password)
+        self.http.verify = verify_ssl
+        self.scheme = 'https' if use_https else 'http'
         self.host = host
         self.port = port
         authority = host + ':' + str(port) if port else host
@@ -60,7 +59,7 @@ class IeegApi:
         """
         Returns a Response with a dataset's id given its name
         """
-        url = self.base_url + IeegApi._get_id_by_dataset_name_url + dataset_name
+        url = self.base_url + IeegApi._get_id_by_dataset_name_path + dataset_name
 
         response = self.http.get(url)
         return response
@@ -69,7 +68,7 @@ class IeegApi:
         """
         Returns Response with time series details in XML format
         """
-        url = self.base_url + IeegApi._get_time_series_details_url + dataset_id
+        url = self.base_url + IeegApi._get_time_series_details_path + dataset_id
         response = self.http.get(url, headers=IeegApi._accept_xml)
         return response
 
@@ -77,7 +76,7 @@ class IeegApi:
         """
         Returns Response with Annotation layers and counts in JSON format.
         """
-        url_str = self.base_url + IeegApi._get_counts_by_layer_url + dataset.snap_id
+        url_str = self.base_url + IeegApi._get_counts_by_layer_path + dataset.snap_id
 
         response = self.http.get(url_str, headers=IeegApi._accept_json)
         return response
@@ -94,7 +93,8 @@ class IeegApi:
         will return the final 52.
 
         :param layer_name: The annotation layer to return
-        :param start_offset_usec: If specified all returned annotations will have a start offset >= start_offset_usec
+        :param start_offset_usec:
+               If specified all returned annotations will have a start offset >= start_offset_usec
         :param first_result: If specified, the zero-based index of the first annotation to return.
         :param max_results: If specified, the maximum number of annotations to return.
         :returns: a list of annotations in the given layer ordered by start offset.
@@ -121,13 +121,13 @@ class IeegApi:
         wrapper1 = ET.Element('timeSeriesIdAndDChecks')
         wrapper2 = ET.SubElement(wrapper1, 'timeSeriesIdAndDChecks')
         i = 0
-        for ts in dataset.ts_array:
+        for ts_details in dataset.ts_array:
             if i in channels:
                 el1 = ET.SubElement(wrapper2, 'timeSeriesIdAndCheck')
                 el2 = ET.SubElement(el1, 'dataCheck')
-                el2.text = ts.findall('dataCheck')[0].text
+                el2.text = ts_details.findall('dataCheck')[0].text
                 el3 = ET.SubElement(el1, 'id')
-                el3.text = ts.findall('revisionId')[0].text
+                el3.text = ts_details.findall('revisionId')[0].text
             i += 1
 
         data = ET.tostring(wrapper1, encoding="us-ascii",
@@ -149,22 +149,24 @@ class IeegApi:
         # request_body is oddly verbose because it was originally designed as XML.
         ts_revids = set()
         ts_annotations = []
-        for a in annotations:
-            if a.parent != dataset:
+        for annotation in annotations:
+            if annotation.parent != dataset:
                 raise ValueError(
-                    'Annotation does not belong to this dataset. It belongs to dataset ' + a.parent.snap_id)
-            annotated_revids = [detail.portal_id for detail in a.annotated]
+                    'Annotation does not belong to this dataset. It belongs to dataset '
+                    + annotation.parent.snap_id)
+            annotated_revids = [
+                detail.portal_id for detail in annotation.annotated]
             ts_annotation = {
                 'timeseriesRevIds': {'timeseriesRevId': annotated_revids},
-                'annotator': a.annotator,
-                'type': a.type,
-                'description': a.description,
-                'layer': a.layer,
-                'startTimeUutc': a.start_time_offset_usec,
-                'endTimeUutc': a.end_time_offset_usec
+                'annotator': annotation.annotator,
+                'type': annotation.type,
+                'description': annotation.description,
+                'layer': annotation.layer,
+                'startTimeUutc': annotation.start_time_offset_usec,
+                'endTimeUutc': annotation.end_time_offset_usec
             }
-            if a.portal_id:
-                ts_annotation['revId'] = a.portal_id
+            if annotation.portal_id:
+                ts_annotation['revId'] = annotation.portal_id
             ts_annotations.append(ts_annotation)
             ts_revids.update(annotated_revids)
 

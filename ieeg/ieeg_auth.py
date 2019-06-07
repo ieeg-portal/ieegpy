@@ -24,10 +24,9 @@ import urllib3
 class IeegAuth(AuthBase):
     """Attaches IEEG authentication headers to the given Request object."""
 
-    def __init__(self, username, password, request_json=False):
+    def __init__(self, username, password):
         self.username = username
-        self.password = password
-        self.request_json = request_json
+        self.password = self._md5(password)
 
     def __call__(self, r):
         d_time = datetime.datetime.now().isoformat()
@@ -67,3 +66,11 @@ class IeegAuth(AuthBase):
         sig_hasher = hashlib.sha256()
         sig_hasher.update(to_be_hashed.encode('utf-8'))
         return base64.standard_b64encode(sig_hasher.digest())
+
+    def _md5(self, user_string):
+        """
+        Return MD5 hashed string
+        """
+        hasher = hashlib.md5()
+        hasher.update(user_string.encode('utf-8'))
+        return hasher.hexdigest()

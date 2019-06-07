@@ -25,10 +25,10 @@ def main(args):
     """
     Adds some annotations to the given dataset
     """
-    
+
     if len(args) < 4:
         print(
-            'Usage: add_annotations username password dataset_name')
+            'Usage: add_annotations username password dataset_name [layer]')
         sys.exit(1)
 
     user = args[1]
@@ -36,19 +36,26 @@ def main(args):
     #Session.method = 'http://'
     #Session.host = '127.0.0.1'
     #Session.port = ':8888'
-    session = Session(user, args[2])
+    with Session(user, args[2]) as session:
 
-    dataset = session.open_dataset(args[3])
+        dataset = session.open_dataset(args[3])
 
-    annotations = [Annotation(dataset, user,
-                              'Test', 'A test annotation', 'Test Layer', 100000, 200100),
-                   Annotation(dataset, user,
-                              'Test 2', 'A test annotation', 'Test Layer', 200000, 300200)]
+        layer_name = args[4] if len(args) > 4 else None
 
-    dataset.add_annotations(annotations)
+        if not layer_name:
+            layer_to_count = dataset.get_annotation_layers()
+            print(layer_to_count)
+        else:
+            annotations = [Annotation(dataset, user,
+                                      'Test', 'A test annotation', layer_name, 100000, 200100),
+                           Annotation(dataset, user,
+                                      'Test 2', 'A test annotation', layer_name, 200000, 300200)]
 
-    session.close_dataset(dataset)
-    session.close()
+            dataset.add_annotations(annotations)
+            layer_to_count = dataset.get_annotation_layers()
+            print(layer_to_count)
+        session.close_dataset(dataset)
+        
 
 
 if __name__ == "__main__":

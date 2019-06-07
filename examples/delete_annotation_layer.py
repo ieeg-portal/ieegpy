@@ -32,24 +32,24 @@ def main(args):
     #Session.method = 'http://'
     #Session.host = '127.0.0.1'
     #Session.port = ':8888'
-    session = Session(user, args[2])
+    with Session(user, args[2]) as session:
 
-    dataset = session.open_dataset(args[3])
+        dataset = session.open_dataset(args[3])
 
-    layer_name = args[4] if len(args) > 4 else None
+        layer_name = args[4] if len(args) > 4 else None
 
-    layer_to_count = dataset.get_annotation_layers()
+        layer_to_count = dataset.get_annotation_layers()
 
-    if not layer_name:
-        print(layer_to_count)
-    else:
-        print('Deleting', layer_to_count[layer_name],
-              'annotations from', layer_name)
-        deleted = dataset.delete_annotation_layer(layer_name)
-        print('Deleted', deleted, 'annotations')
-        print(dataset.get_annotation_layers())
-    session.close_dataset(dataset)
-    session.close()
+        if not layer_name:
+            print(layer_to_count)
+        else:
+            print('Deleting', layer_to_count[layer_name],
+                  'annotations from', layer_name)
+            deleted = dataset.delete_annotation_layer(layer_name)
+            print('Deleted', deleted, 'annotations')
+            print(dataset.get_annotation_layers())
+
+        session.close_dataset(dataset)
 
 
 if __name__ == "__main__":

@@ -33,35 +33,34 @@ def main(args):
     print('Logging into IEEG:', args[1], '/ ****')
     #Session.method = 'http://'
     #Session.host = '127.0.0.1'
-    #Session.port = ':8888'
-    session = Session(args[1], args[2])
+    #Session.port = '8888'
+    with Session(args[1], args[2]) as session:
 
-    dataset = session.open_dataset(args[3])
+        dataset = session.open_dataset(args[3])
 
-    layer_name = args[4] if len(args) > 4 else None
+        layer_name = args[4] if len(args) > 4 else None
 
-    layer_to_count = dataset.get_annotation_layers()
+        layer_to_count = dataset.get_annotation_layers()
 
-    if not layer_name:
-        print(layer_to_count)
-    else:
-        expected_count = layer_to_count[layer_name]
-        actual_count = 0
-        max_results = None if expected_count < 100 else 100
-        call_number = 0
-        while actual_count < expected_count:
-            annotations = dataset.get_annotations(
-                layer_name, first_result=actual_count, max_results=max_results)
-            call_number += 1
-            actual_count += len(annotations)
-            first = annotations[0].start_time_offset_usec
-            last = annotations[-1].end_time_offset_usec
-            print("got", len(annotations), "annotations on call #",
-                  call_number, "covering", first, "usec to", last, "usec")
-        print("got", actual_count, "annotations in total")
+        if not layer_name:
+            print(layer_to_count)
+        else:
+            expected_count = layer_to_count[layer_name]
+            actual_count = 0
+            max_results = None if expected_count < 100 else 100
+            call_number = 0
+            while actual_count < expected_count:
+                annotations = dataset.get_annotations(
+                    layer_name, first_result=actual_count, max_results=max_results)
+                call_number += 1
+                actual_count += len(annotations)
+                first = annotations[0].start_time_offset_usec
+                last = annotations[-1].end_time_offset_usec
+                print("got", len(annotations), "annotations on call #",
+                      call_number, "covering", first, "usec to", last, "usec")
+            print("got", actual_count, "annotations in total")
 
-    session.close_dataset(dataset)
-    session.close()
+        session.close_dataset(dataset)
 
 
 if __name__ == "__main__":
