@@ -77,11 +77,15 @@ def move(dataset, args):
     if not from_layer:
         print(layer_to_count)
     else:
-        print('Moving', layer_to_count[from_layer],
-              'annotations from', from_layer, 'to', to_layer)
-        moved = dataset.move_annotation_layer(from_layer, to_layer)
-        print('Moved', moved, 'annotations')
-        print(dataset.get_annotation_layers())
+        count = layer_to_count.get(from_layer)
+        if not count:
+            print(from_layer, 'contains no annotations')
+        else:
+            print('Moving', count,
+                  'annotations from', from_layer, 'to', to_layer)
+            moved = dataset.move_annotation_layer(from_layer, to_layer)
+            print('Moved', moved, 'annotations')
+            print(dataset.get_annotation_layers())
 
 
 def delete(dataset, args):
@@ -116,7 +120,8 @@ def main():
     """
 
     # create the top-level parser
-    parser = argparse.ArgumentParser(epilog='<subcommand> -h for subcommand help')
+    parser = argparse.ArgumentParser(
+        epilog='<subcommand> -h for subcommand help')
     parser.add_argument('-u', '--user', required=True, help='username')
     parser.add_argument('-p', '--password',
                         help='password (will be prompted if missing)')

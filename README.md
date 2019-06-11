@@ -11,7 +11,7 @@ Supported environments:
 
 ## Getting Started
 
-First, be sure you have signed up at [IEEG.org](www.ieeg.org) so you have an active account and password.
+First, be sure you have signed up at [IEEG.org](https://www.ieeg.org) so you have an active account and password.
 
 Install the dependencies:
 ```
