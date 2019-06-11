@@ -122,8 +122,8 @@ def main():
                         help='password (will be prompted if missing')
 
     parser.add_argument('--host', help='the host')
-    parser.add_argument('--use_ssl', action='store_true', default=True,
-                        help="Use https, not http. Ignored unless --host is set.")
+    parser.add_argument('--no_ssl', action='store_true', default=False,
+                        help="Do not use https. Ignored unless --host is set.")
     parser.add_argument(
         '--port', help='The port. Ignored unless --host is set.')
     parser.set_defaults(parser=parser)
@@ -180,7 +180,7 @@ def main():
             Session.host = args.host
             if args.port:
                 Session.port = args.port
-            Session.method = 'https' if args.use_ssl else 'http'
+            Session.method = 'http' if args.no_ssl else 'https'
 
         with Session(args.user, args.password) as session:
             dataset = session.open_dataset(args.dataset)
