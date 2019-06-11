@@ -116,10 +116,10 @@ def main():
     """
 
     # create the top-level parser
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(epilog='<subcommand> -h for subcommand help')
     parser.add_argument('-u', '--user', required=True, help='username')
     parser.add_argument('-p', '--password',
-                        help='password (will be prompted if missing')
+                        help='password (will be prompted if missing)')
 
     parser.add_argument('--host', help='the host')
     parser.add_argument('--no_ssl', action='store_true', default=False,
@@ -129,8 +129,7 @@ def main():
     parser.set_defaults(parser=parser)
 
     subparsers = parser.add_subparsers(title='subcommands',
-                                       description='valid subcommands',
-                                       help='<subcommand> -h for subcommand help')
+                                       description='valid subcommands')
 
     dataset_parser = argparse.ArgumentParser(add_help=False)
     dataset_parser.add_argument('dataset', help='dataset name')
@@ -163,9 +162,9 @@ def main():
                                         parents=[dataset_parser],
                                         help='Move annotations from the source layer to the destination layer.')
     parser_move.add_argument(
-        'from_layer', nargs='?', metavar='from_layer to_layer', help='source layer')
+        'from_layer', nargs='?', help='source layer')
     parser_move.add_argument(
-        'to_layer', nargs='?', metavar='', help='destination layer')
+        'to_layer', nargs='?', help='destination layer')
     parser_move.set_defaults(func=move, parser=parser_move)
 
     args = parser.parse_args()
