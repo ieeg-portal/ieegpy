@@ -15,15 +15,33 @@
 '''
 import argparse
 import getpass
+import functools
 from ieeg.auth import Session
 from ieeg.dataset import Annotation
 
 
-def print_layers(dataset):
-    layer_to_count = dataset.get_annotation_layers()
-    print(layer_to_count)
+def dataset_required(func):
+    """
+    Obtains dataset for func and calls it, passing dataset as first argument.
+    """
+    @functools.wraps(func)
+    def pass_dataset(args):
+        if not args.password:
+            args.password = getpass.getpass()
+        if args.host:
+            Session.host = args.host
+            if args.port:
+                Session.port = args.port
+            Session.method = 'http' if args.no_ssl else 'https'
+
+        with Session(args.user, args.password) as session:
+            dataset = session.open_dataset(args.dataset)
+            func(dataset, args)
+            session.close_dataset(dataset)
+    return pass_dataset
 
 
+@dataset_required
 def read(dataset, args):
     """
     Reads annotations from dataset.
@@ -33,7 +51,10 @@ def read(dataset, args):
     if not layer_name:
         print(layer_to_count)
     else:
-        expected_count = layer_to_count[layer_name]
+        expected_count = layer_to_count.get(layer_name)
+        if not expected_count:
+            print('Layer', layer_name, 'does not exist')
+            return
         actual_count = 0
         max_results = None if expected_count < 100 else 100
         call_number = 0
@@ -49,13 +70,15 @@ def read(dataset, args):
         print("got", actual_count, "annotations in total")
 
 
+@dataset_required
 def add(dataset, args):
     """
     Adds two annotations to the given dataset layer.
     """
     layer_name = args.layer
     if not layer_name:
-        print_layers(dataset)
+        layer_to_count = dataset.get_annotation_layers()
+        print(layer_to_count)
     else:
         annotations = [Annotation(dataset, args.user,
                                   'Test', 'A test annotation', layer_name, 100000, 200100),
@@ -67,6 +90,7 @@ def add(dataset, args):
         print(layer_to_count)
 
 
+@dataset_required
 def move(dataset, args):
     """
     Move annotations from one layer to another.
@@ -88,6 +112,7 @@ def move(dataset, args):
             print(dataset.get_annotation_layers())
 
 
+@dataset_required
 def delete(dataset, args):
     """
     Delete annotations from the given layer.
@@ -102,6 +127,13 @@ def delete(dataset, args):
         deleted = dataset.delete_annotation_layer(layer_name)
         print('Deleted', deleted, 'annotations')
         print(dataset.get_annotation_layers())
+
+
+def fail_no_command(args):
+    """
+    Reports failure when no subcommand was given.
+    """
+    args.parser.error('A subcommand is required.')
 
 
 def validate(args):
@@ -131,7 +163,7 @@ def main():
                         help="Do not use https. Ignored unless --host is set.")
     parser.add_argument(
         '--port', help='The port. Ignored unless --host is set.')
-    parser.set_defaults(parser=parser)
+    parser.set_defaults(func=fail_no_command, parser=parser)
 
     subparsers = parser.add_subparsers(title='subcommands',
                                        description='valid subcommands')
@@ -165,7 +197,8 @@ def main():
     # The "move" command
     parser_move = subparsers.add_parser('move',
                                         parents=[dataset_parser],
-                                        help='Move annotations from the source layer to the destination layer.')
+                                        help="""Move annotations from the source layer
+                                                to the destination layer.""")
     parser_move.add_argument(
         'from_layer', nargs='?', help='source layer')
     parser_move.add_argument(
@@ -174,22 +207,8 @@ def main():
 
     args = parser.parse_args()
 
-    if not hasattr(args, 'func'):
-        parser.error('A subcommand is required.')
-    else:
-        validate(args)
-        if not args.password:
-            args.password = getpass.getpass()
-        if args.host:
-            Session.host = args.host
-            if args.port:
-                Session.port = args.port
-            Session.method = 'http' if args.no_ssl else 'https'
-
-        with Session(args.user, args.password) as session:
-            dataset = session.open_dataset(args.dataset)
-            args.func(dataset, args)
-            session.close_dataset(dataset)
+    validate(args)
+    args.func(args)
 
 
 if __name__ == "__main__":
