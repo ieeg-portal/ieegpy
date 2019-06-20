@@ -316,6 +316,8 @@ class Dataset:
             print(response_body)
             raise IeegConnectionError(
                 'Could not add annotations')
+        if self.session.mprov_listener:
+                self.session.mprov_listener.on_add_annotations(annotations)
 
     def move_annotation_layer(self, from_layer, to_layer):
         """

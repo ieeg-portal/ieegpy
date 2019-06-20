@@ -28,7 +28,7 @@ class Session:
     port = ""
     method = 'https://'
 
-    def __init__(self, name, pwd, verify_ssl=True):
+    def __init__(self, name, pwd, verify_ssl=True, mprov_listener=None):
         self.username = name
         use_https = Session.method.startswith('https')
         # Session.url_builder requires Session.port == ':8080' to use port 8080.
@@ -37,6 +37,7 @@ class Session:
             ':') else Session.port
         self.api = IeegApi(self.username, pwd,
                            use_https=use_https, host=Session.host, port=port, verify_ssl=verify_ssl)
+        self.mprov_listener = mprov_listener
 
     def __enter__(self):
         return self
