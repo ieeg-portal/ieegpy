@@ -239,7 +239,7 @@ class Dataset:
             raise IeegConnectionError(
                 'Could not get annotation layers for dataset')
 
-        response_body = response.json()  
+        response_body = response.json()
         counts_by_layer = response_body['countsByLayer']['countsByLayer']
         if not counts_by_layer:
             return {}
@@ -256,12 +256,14 @@ class Dataset:
         """
         Returns a list of annotations in the given layer ordered by start time.
 
-        Given a Dataset ds with no new annotations being added, if ds.get_annotations('my_layer') returns 152 annotations,
-        then ds.get_annotations('my_layer', max_results=100) will return the first 100 of those and 
-        ds.get_annotations('my_layer', first_result=100, max_results=100) will return the final 52.
+        Given a Dataset ds with no new annotations being added, if ds.get_annotations('my_layer')
+        returns 152 annotations, then ds.get_annotations('my_layer', max_results=100) will return
+        the first 100 of those and ds.get_annotations('my_layer', first_result=100, max_results=100)
+        will return the final 52.
 
         :param layer_name: The annotation layer to return
-        :param start_offset_usec: If specified all returned annotations will have a start offset >= start_offset_usec
+        :param start_offset_usec: If specified all returned annotations will have a
+                                  start offset >= start_offset_usec
         :param first_result: If specified, the zero-based index of the first annotation to return.
         :param max_results: If specified, the maximum number of annotations to return.
         :returns: a list of annotations in the given layer ordered by start offset.
@@ -290,7 +292,7 @@ class Dataset:
                 a['endTimeUutc'],
                 portal_id=a['revId'],
                 annotated_portal_ids=a['timeseriesRevIds']['timeseriesRevId'])
-                for a in json_annotations]
+                           for a in json_annotations]
         except TypeError:
             # If there is only one annotation in the layer,
             # json_annotations won't be a list. It'll be an annotation.
@@ -317,7 +319,7 @@ class Dataset:
             raise IeegConnectionError(
                 'Could not add annotations')
         if self.session.mprov_listener:
-                self.session.mprov_listener.on_add_annotations(annotations)
+            self.session.mprov_listener.on_add_annotations(annotations)
 
     def move_annotation_layer(self, from_layer, to_layer):
         """

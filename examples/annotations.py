@@ -16,8 +16,10 @@
 import argparse
 import getpass
 import functools
+from pennprov.connection.mprov_connection import MProvConnection
 from ieeg.auth import Session
 from ieeg.dataset import Annotation
+from ieeg.mprov_listener import MProvListener
 
 
 def dataset_required(func):
@@ -28,13 +30,20 @@ def dataset_required(func):
     def pass_dataset(args):
         if not args.password:
             args.password = getpass.getpass()
+        if args.mprov_user and not args.mprov_password:
+            args.mprov_password = getpass.getpass('MProv Password: ')
         if args.host:
             Session.host = args.host
             if args.port:
                 Session.port = args.port
             Session.method = 'http' if args.no_ssl else 'https'
-
-        with Session(args.user, args.password) as session:
+        mprov_listener = None
+        if args.mprov_user:
+            mprov_url = 'http://localhost:8088' if args.mprov_url is None else args.mprov_url
+            mprov_connection = MProvConnection(
+                args.mprov_user, args.mprov_password, mprov_url)
+            mprov_listener = MProvListener(mprov_connection)
+        with Session(args.user, args.password, mprov_listener=mprov_listener) as session:
             dataset = session.open_dataset(args.dataset)
             func(dataset, args)
             session.close_dataset(dataset)
@@ -157,6 +166,11 @@ def main():
     parser.add_argument('-u', '--user', required=True, help='username')
     parser.add_argument('-p', '--password',
                         help='password (will be prompted if missing)')
+    parser.add_argument('--mprov_user', help='MProv username')
+    parser.add_argument('--mprov_password',
+                        help='MProv password (will be prompted if missing)')
+    parser.add_argument('--mprov_url',
+                        help='MProv URL')
 
     parser.add_argument('--host', help='the host')
     parser.add_argument('--no_ssl', action='store_true', default=False,
