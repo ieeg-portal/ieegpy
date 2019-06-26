@@ -19,7 +19,7 @@ import functools
 from pennprov.connection.mprov_connection import MProvConnection
 from ieeg.auth import Session
 from ieeg.dataset import Annotation
-from ieeg.mprov_listener import MProvListener
+from ieeg.mprov_listener import MProvListener, MProvListener2
 
 
 def dataset_required(func):
