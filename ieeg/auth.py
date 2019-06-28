@@ -71,18 +71,26 @@ class Session:
         # Check response
         if get_id_response.status_code != 200:
             print(get_id_response.text)
-            raise IeegConnectionError('Authorization failed or cannot find study ' + name)
+            raise IeegConnectionError(
+                'Authorization failed or cannot find study ' + name)
 
         snapshot_id = get_id_response.text
 
-        time_series_details_response = self.api.get_time_series_details(snapshot_id)
+        time_series_details_response = self.api.get_time_series_details(
+            snapshot_id)
 
         if time_series_details_response.status_code != 200:
             print(time_series_details_response.text)
-            raise IeegConnectionError('Authorization failed or cannot get time series details for ' + name)
+            raise IeegConnectionError('Authorization failed or cannot get time series details for ' +
+                                      name)
 
-        # Return Habitat Dataset object
-        return DS(ET.fromstring(time_series_details_response.text), snapshot_id, self)
+        dataset = DS(ET.fromstring(
+            time_series_details_response.text), snapshot_id, self)
+
+        if self.mprov_listener:
+            self.mprov_listener.on_open_dataset(name, dataset)
+
+        return dataset
 
     def close_dataset(self, ds):
         """

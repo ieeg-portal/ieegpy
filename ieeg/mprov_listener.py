@@ -18,56 +18,20 @@ from pennprov.connection.mprov_connection import MProvConnection
 import pennprov.models
 
 
-class MProvStream:
-    """
-    A MProv Stream
-    """
-
-    def __init__(self, stream_name, initial_index=None):
-        self.name = stream_name
-        self._index = 1 if initial_index is None else initial_index
-
-    def get_index(self):
-        """
-        Returns the current stream index.
-        """
-        index = self._index
-        self._index += 1
-        return index
-
-
-class AnnotationStreamFactory:
-    """
-    Provides a MProvStream given an ieeg.dataset.Annotation instance.
-    """
-
-    def __init__(self, get_stream_name_fn=None):
-        if get_stream_name_fn:
-            self.get_stream_name = get_stream_name_fn
-        else:
-            self.get_stream_name = lambda ann: ann.parent.snap_id
-        self.streams = {}
-
-    def get_annotation_stream(self, annotation, initial_index=None):
-        """
-        Returns the stream corresponding to the given annotation.
-        If no such stream exists, it is created.
-        """
-        stream_name = self.get_stream_name(annotation)
-        stream = self.streams.get(stream_name)
-        if not stream:
-            stream = MProvStream(stream_name, initial_index)
-            self.streams[stream_name] = stream
-
-        return stream
-
-
 class MProvListener:
     """
     A hook into the MProv system. If an instance is passed to ieeg.Session() through
     the mprov_listener keyword arg its methods will be called when the appropriate
     ieeg.Dataset method is called.
     """
+    dataset_namespace = MProvConnection.namespace + '/dataset#'
+    dataset_attr_name = pennprov.QualifiedName(
+        namespace=dataset_namespace, local_part='name')
+
+    timeseries_namespace = MProvConnection.namespace + '/timeseries#'
+    timeseries_attr_name = pennprov.QualifiedName(
+        namespace=timeseries_namespace, local_part='name')
+
     annotation_namespace = MProvConnection.namespace + '/annotation#'
     annotator_name = pennprov.QualifiedName(
         namespace=annotation_namespace, local_part='annotator')
@@ -84,10 +48,21 @@ class MProvListener:
     annotated_name = pennprov.QualifiedName(
         namespace=annotation_namespace, local_part='annotated')
 
-    def __init__(self, mprov_connection, annotation_stream_factory=None):
+    def __init__(self, mprov_connection):
         self.mprov_connection = mprov_connection
-        self.annotation_stream_factory = (
-            annotation_stream_factory if annotation_stream_factory else AnnotationStreamFactory())
+        self.dataset_id_to_token = {}
+
+    def on_open_dataset(self, dataset_name, dataset):
+        """
+        Called when ieeg.Session.open_dataset() is called.
+        """
+        dataset_id = dataset.snap_id
+        info = self.dataset_id_to_token.get(dataset_id)
+        if not info:
+            token = self.ensure_dataset_entity(dataset_name, dataset)
+            self.dataset_id_to_token[dataset_id] = {
+                'token': token,
+                'name': dataset_name}
 
     def on_add_annotations(self, annotations):
         """
@@ -119,43 +94,74 @@ class MProvListener:
 
         return attributes
 
-    def ensure_dataset_entity(self, token):
+    def ensure_dataset_entity(self, dataset_name, dataset):
         """
-        Stores the given dataset token to the ProvDm store if necessary.
+        Stores a Collection for the given dataset to the ProvDm store if necessary.
         """
         mprov = self.mprov_connection
         graph = mprov.get_graph()
         prov_api = mprov.get_low_level_api()
+        token = token = pennprov.QualifiedName(
+            self.dataset_namespace, dataset.snap_id)
         try:
             prov_api.get_provenance_data(
                 resource=graph, token=token)
         except pennprov.rest.ApiException as api_error:
             if api_error.status != 404:
                 raise api_error
-            entity = pennprov.NodeModel(type='ENTITY', attributes=[])
+            attributes = [pennprov.models.Attribute(
+                name=self.dataset_attr_name, value=dataset_name, type='STRING')]
+            entity = pennprov.NodeModel(
+                type='COLLECTION', attributes=attributes)
             mprov.prov_dm_api.store_node(resource=graph,
                                          token=token, body=entity)
+            for _, tsd in dataset.ts_details.items():
+                ts_token = self.ensure_timeseries_entity(tsd)
+                membership = pennprov.RelationModel(
+                    type='MEMBERSHIP', subject_id=token, object_id=ts_token, attributes=[])
+                mprov.prov_dm_api.store_relation(
+                    resource=graph, body=membership, label='hadMember')
+        return token
+
+    def ensure_timeseries_entity(self, ts_details):
+        """
+        Stores an Entity for the given TimeSeriesDetails instance.
+        """
+        mprov = self.mprov_connection
+        graph = mprov.get_graph()
+        prov_api = mprov.get_low_level_api()
+        token = token = pennprov.QualifiedName(
+            self.timeseries_namespace, ts_details.portal_id)
+        try:
+            prov_api.get_provenance_data(
+                resource=graph, token=token)
+        except pennprov.rest.ApiException as api_error:
+            if api_error.status != 404:
+                raise api_error
+            attributes = [pennprov.models.Attribute(
+                name=self.timeseries_attr_name, value=ts_details.channel_label, type='STRING')]
+            entity = pennprov.NodeModel(
+                type='ENTITY', attributes=attributes)
+            mprov.prov_dm_api.store_node(resource=graph,
+                                         token=token, body=entity)
+        return token
 
     def store_annotation(self, annotation):
         """
         Stores the given annotation in the ProvDm store.
         """
         mprov = self.mprov_connection
-        stream = self.annotation_stream_factory.get_annotation_stream(
-            annotation)
-        stream_index = stream.get_index()
 
-        # The "token" for the tuple will be the node ID
-        token = pennprov.QualifiedName(
-            mprov.namespace + '/dataset#', annotation.parent.snap_id)
-        self.ensure_dataset_entity(token)
+        dataset_id = annotation.parent.snap_id
+
+        token = self.dataset_id_to_token[dataset_id]['token']
 
         ann_token = pennprov.QualifiedName(self.annotation_namespace,
-                                           mprov.get_entity_id(stream.name +
-                                                               '.' +
-                                                               annotation.layer +
-                                                               '.' +
-                                                               annotation.type, stream_index))
+                                           (dataset_id +
+                                            '.' +
+                                            annotation.layer +
+                                            '.' +
+                                            annotation.type))
 
         # The key/value pair will itself be an entity node
         attributes = self.get_annotation_attributes(annotation)
