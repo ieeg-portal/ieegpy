@@ -57,12 +57,10 @@ class MProvListener:
         Called when ieeg.Session.open_dataset() is called.
         """
         dataset_id = dataset.snap_id
-        info = self.dataset_id_to_token.get(dataset_id)
-        if not info:
+        token = self.dataset_id_to_token.get(dataset_id)
+        if not token:
             token = self.ensure_dataset_entity(dataset_name, dataset)
-            self.dataset_id_to_token[dataset_id] = {
-                'token': token,
-                'name': dataset_name}
+            self.dataset_id_to_token[dataset_id] = token
 
     def on_add_annotations(self, annotations):
         """
@@ -154,7 +152,7 @@ class MProvListener:
 
         dataset_id = annotation.parent.snap_id
 
-        token = self.dataset_id_to_token[dataset_id]['token']
+        token = self.dataset_id_to_token[dataset_id]
 
         ann_token = pennprov.QualifiedName(self.annotation_namespace,
                                            (dataset_id +
