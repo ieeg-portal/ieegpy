@@ -22,7 +22,10 @@ from ieeg.ieeg_api import IeegApi
 
 class Session:
     """
-    Class representing Session on the platform
+    Class representing Session on the platform. Session is context manager and can be used in `with` statements to automatically close resouces.
+
+       with Session(username, password) as session:
+           ...
     """
     host = "www.ieeg.org"
     port = ""
@@ -47,6 +50,11 @@ class Session:
 
 
     def close(self):
+        """
+        Closes Session resources. Can also use Session as a context manager in a with clause:
+            with Session(username, password) as session:
+                ...
+        """
         self.api.close()
 
     @deprecated

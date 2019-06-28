@@ -19,7 +19,7 @@ import functools
 from pennprov.connection.mprov_connection import MProvConnection
 from ieeg.auth import Session
 from ieeg.dataset import Annotation
-from ieeg.mprov_listener import MProvListener, MProvListener2
+from ieeg.mprov_listener import MProvListener
 
 
 def dataset_required(func):
@@ -40,6 +40,8 @@ def dataset_required(func):
         mprov_listener = None
         if args.mprov_user:
             mprov_url = 'http://localhost:8088' if args.mprov_url is None else args.mprov_url
+            if args.mprov_graph:
+                MProvConnection.graph_name = args.mprov_graph
             mprov_connection = MProvConnection(
                 args.mprov_user, args.mprov_password, mprov_url)
             mprov_listener = MProvListener(mprov_connection)
@@ -171,6 +173,8 @@ def main():
                         help='MProv password (will be prompted if missing)')
     parser.add_argument('--mprov_url',
                         help='MProv URL')
+    parser.add_argument('--mprov_graph',
+                        help='MProv graph name')
 
     parser.add_argument('--host', help='the host')
     parser.add_argument('--no_ssl', action='store_true', default=False,

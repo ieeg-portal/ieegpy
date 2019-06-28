@@ -192,10 +192,10 @@ class IeegApi:
 
         :returns: a Response with JSON body. Has number of moved annotations.
         """
-        req_path = '/timeseries/datasets/'\
-            + dataset.snap_id\
-            + '/tsAnnotations/'\
-            + from_layer
+        req_path = ('/timeseries/datasets/'
+                    + dataset.snap_id
+                    + '/tsAnnotations/'
+                    + from_layer)
         url_str = self.base_url + req_path
 
         query_params = {'toLayerName': to_layer}
