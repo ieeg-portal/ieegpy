@@ -51,6 +51,7 @@ class MProvListener:
     def __init__(self, mprov_connection):
         self.mprov_connection = mprov_connection
         self.dataset_id_to_token = {}
+        self.timeseries_id_to_token = {}
 
     def on_open_dataset(self, dataset_name, dataset):
         """
@@ -73,23 +74,16 @@ class MProvListener:
         """
         Returns list of pennprov Attributes for the given annotation.
         """
-        attributes = []
-        attributes.append(pennprov.models.Attribute(
-            name=self.annotator_name, value=annotation.annotator, type='STRING'))
-        attributes.append(pennprov.models.Attribute(
-            name=self.type_name, value=annotation.type, type='STRING'))
-        attributes.append(pennprov.models.Attribute(
-            name=self.description_name, value=annotation.description, type='STRING'))
-        attributes.append(pennprov.models.Attribute(
-            name=self.layer_name, value=annotation.layer, type='STRING'))
-        attributes.append(pennprov.models.Attribute(
-            name=self.start_time_name, value=annotation.start_time_offset_usec, type='LONG'))
-        attributes.append(pennprov.models.Attribute(
-            name=self.end_time_name, value=annotation.end_time_offset_usec, type='LONG'))
-        for tsd in annotation.annotated:
-            attributes.append(pennprov.models.Attribute(
-                name=self.annotated_name, value=tsd.channel_label, type='STRING'))
-
+        attributes = [
+            pennprov.models.Attribute(
+                name=self.annotator_name, value=annotation.annotator, type='STRING'),
+            pennprov.models.Attribute(
+                name=self.type_name, value=annotation.type, type='STRING'),
+            pennprov.models.Attribute(
+                name=self.description_name, value=annotation.description, type='STRING'),
+            pennprov.models.Attribute(
+                name=self.layer_name, value=annotation.layer, type='STRING')
+        ]
         return attributes
 
     def ensure_dataset_entity(self, dataset_name, dataset):
@@ -114,7 +108,10 @@ class MProvListener:
             mprov.prov_dm_api.store_node(resource=graph,
                                          token=token, body=entity)
             for _, tsd in dataset.ts_details.items():
-                ts_token = self.ensure_timeseries_entity(tsd)
+                ts_token = self.timeseries_id_to_token.get(tsd.portal_id)
+                if not ts_token:
+                    ts_token = self.ensure_timeseries_entity(tsd)
+                    self.timeseries_id_to_token[tsd.portal_id] = ts_token
                 membership = pennprov.RelationModel(
                     type='MEMBERSHIP', subject_id=token, object_id=ts_token, attributes=[])
                 mprov.prov_dm_api.store_relation(
@@ -149,17 +146,33 @@ class MProvListener:
         Stores the given annotation in the ProvDm store.
         """
         mprov = self.mprov_connection
-
+        graph = mprov.get_graph()
         dataset_id = annotation.parent.snap_id
+        annotation_id = (dataset_id + '.' +
+                         annotation.layer + '.' + annotation.type)
 
-        token = self.dataset_id_to_token[dataset_id]
+        ts_coll_token = pennprov.QualifiedName(self.annotation_namespace,
+                                               (annotation_id + '/annotated'))
+        ts_coll_attributes = [
+            pennprov.models.Attribute(
+                name=self.start_time_name, value=annotation.start_time_offset_usec, type='LONG'),
+            pennprov.models.Attribute(
+                name=self.end_time_name, value=annotation.end_time_offset_usec, type='LONG')
+        ]
+        ts_coll_entity = pennprov.NodeModel(
+            type='COLLECTION', attributes=ts_coll_attributes)
+        mprov.prov_dm_api.store_node(resource=graph,
+                                     token=ts_coll_token, body=ts_coll_entity)
+
+        for tsd in annotation.annotated:
+            ts_token = self.timeseries_id_to_token.get(tsd.portal_id)
+            membership = pennprov.RelationModel(
+                type='MEMBERSHIP', subject_id=ts_coll_token, object_id=ts_token, attributes=[])
+            mprov.prov_dm_api.store_relation(
+                resource=graph, body=membership, label='hadMember')
 
         ann_token = pennprov.QualifiedName(self.annotation_namespace,
-                                           (dataset_id +
-                                            '.' +
-                                            annotation.layer +
-                                            '.' +
-                                            annotation.type))
+                                           annotation_id)
 
         # The key/value pair will itself be an entity node
         attributes = self.get_annotation_attributes(annotation)
@@ -169,7 +182,7 @@ class MProvListener:
 
         # Then we add a relationship edge (of type ANNOTATED)
         annotates = pennprov.RelationModel(
-            type='ANNOTATED', subject_id=token, object_id=ann_token, attributes=[])
+            type='ANNOTATED', subject_id=ts_coll_token, object_id=ann_token, attributes=[])
         mprov.prov_dm_api.store_relation(
             resource=mprov.get_graph(), body=annotates, label='_annotated')
 

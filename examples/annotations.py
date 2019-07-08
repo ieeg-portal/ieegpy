@@ -91,10 +91,11 @@ def add(dataset, args):
         layer_to_count = dataset.get_annotation_layers()
         print(layer_to_count)
     else:
+        annotated_labels = [dataset.ch_labels[0], dataset.ch_labels[-1]]
         annotations = [Annotation(dataset, args.user,
-                                  'Test', 'A test annotation', layer_name, 100000, 200100),
+                                  'Test', 'A test annotation', layer_name, 100000, 200100, annotated_labels=annotated_labels),
                        Annotation(dataset, args.user,
-                                  'Test 2', 'A test annotation', layer_name, 200000, 300200)]
+                                  'Test 2', 'A test annotation', layer_name, 200000, 300200, annotated_labels=annotated_labels)]
 
         dataset.add_annotations(annotations)
         layer_to_count = dataset.get_annotation_layers()
