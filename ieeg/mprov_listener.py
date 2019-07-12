@@ -174,16 +174,14 @@ class MProvListener:
         ann_token = pennprov.QualifiedName(self.annotation_namespace,
                                            annotation_id)
 
-        # The key/value pair will itself be an entity node
         attributes = self.get_annotation_attributes(annotation)
-        entity_node = pennprov.NodeModel(type='ENTITY', attributes=attributes)
-        mprov.prov_dm_api.store_node(resource=mprov.get_graph(),
-                                     token=ann_token, body=entity_node)
+        ann_entity = pennprov.NodeModel(type='ENTITY', attributes=attributes)
+        mprov.prov_dm_api.store_node(resource=graph,
+                                     token=ann_token, body=ann_entity)
 
-        # Then we add a relationship edge (of type ANNOTATED)
         annotates = pennprov.RelationModel(
             type='ANNOTATED', subject_id=ts_coll_token, object_id=ann_token, attributes=[])
         mprov.prov_dm_api.store_relation(
-            resource=mprov.get_graph(), body=annotates, label='_annotated')
+            resource=graph, body=annotates, label='_annotated')
 
         return ann_token
