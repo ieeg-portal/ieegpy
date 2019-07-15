@@ -14,8 +14,6 @@
 # limitations under the License.
 ##################################################################################
 
-import xml.etree.ElementTree as ET
-import datetime
 import requests
 import numpy as np
 import pandas as pd
@@ -69,29 +67,48 @@ class Annotation:
         type: The type
         description: The description
         layer: The layer
-        start_time_offset_usec: The start time of this Annotations. In microseconds since the recording start.
-        end_time_offset_usec: The end time of this Annotation. In microseconds since the recording start.
+        start_time_offset_usec: The start time of this Annotations.
+                                In microseconds since the recording start.
+        end_time_offset_usec: The end time of this Annotation. 
+                              In microseconds since the recording start.
     """
 
-    def __init__(self, parent_dataset, portal_id, annotated_rev_ids, annotator, _type, description, layer, start_time_offset_usec, end_time_offset_usec):
+    def __init__(self, parent_dataset, annotator, _type, description, layer,
+                 start_time_offset_usec, end_time_offset_usec,
+                 portal_id=None, annotated_labels=None, annotated_portal_ids=None):
         """
-        Creates an Annotation
+        Creates an Annotation.
+
+        Only one of annotated_labels or annotated_portal_ids need to be provided.
+        If neither is provided, then this Annotation will annotate all the channels
+        in parent_dataset.
 
         Args:
             :param parent_dataset: The Dataset to which this Annotation belongs.
-            :param portal_id: The Annotation's id
-            :param annotated_rev_ids: Either a string or list of strings. The revision ids of the annotated time series.
             :param annotator: The Annotation's creator
             :param _type: The Annotation's type
             :param description: The Annotation's description
             :param layer: The Annotation's layer
-            :param start_time_offset_usec: The Annotation's start time. In microseconds since the start of recording
-            :param end_time_offset_usec: The Annotation's end time. In microseconds since the start of recording
+            :param start_time_offset_usec: The Annotation's start time.
+                                           In microseconds since the start of recording
+            :param end_time_offset_usec: The Annotation's end time.
+                                         In microseconds since the start of recording
+            :param portal_id: The Annotation's id. Should be left as None for new Annotations.
+            :param annotated_labels: The labels of the annotated TimeSeriesDetails.
+                                     Either a string or list of strings.
+            :param annotated_portal_ids: The portal_ids of the annotated TimeSeriesDetails.
+                                         Either a string or list of strings/
         """
         self.parent = parent_dataset
-        self.portal_id = str(portal_id)
-        self.annotated = [self.parent.ts_details_by_id[rev_id] for rev_id in (
-            [annotated_rev_ids] if isinstance(annotated_rev_ids, str) else annotated_rev_ids)]
+        self.portal_id = str(portal_id) if portal_id else None
+        if annotated_labels:
+            self.annotated = [self.parent.ts_details[label] for label in (
+                [annotated_labels] if isinstance(annotated_labels, str) else annotated_labels)]
+        elif annotated_portal_ids:
+            self.annotated = [self.parent.ts_details_by_id[rev_id] for rev_id in (
+                [annotated_portal_ids] if isinstance(annotated_portal_ids, str) else annotated_portal_ids)]
+        else:
+            self.annotated = list(self.parent.ts_details.values())
         self.annotator = annotator
         self.type = _type
         self.description = description
@@ -114,6 +131,7 @@ class Dataset:
     ts_array = []   # Channel
 
     def __init__(self, ts_details, snapshot_id, parent):
+        # type: (xml.etree.Element, str, ieeg.auth.Session) -> None
         self.session = parent
         self.snap_id = snapshot_id
         # only one details in timeseriesdetails
@@ -176,41 +194,9 @@ class Dataset:
         def all_same(items):
             return all(x == items[0] for x in items)
 
-        # Request location
-        get_data_str = "/services/timeseries/getUnscaledTimeSeriesSetBinaryRaw/"
-
-        # Build Data Content XML
-        wrapper1 = ET.Element('timeSeriesIdAndDChecks')
-        wrapper2 = ET.SubElement(wrapper1, 'timeSeriesIdAndDChecks')
-        i = 0
-        for ts in self.ts_array:
-            if i in channels:
-                el1 = ET.SubElement(wrapper2, 'timeSeriesIdAndCheck')
-                el2 = ET.SubElement(el1, 'dataCheck')
-                el2.text = ts.findall('revisionId')[0].text
-                el3 = ET.SubElement(el1, 'id')
-                el3.text = ts.findall('revisionId')[0].text
-            i += 1
-
-        data = ET.tostring(wrapper1, encoding="us-ascii",
-                           method="xml").decode('utf-8')
-        data = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>' + data
-
-        # Create request content
-        req_path = get_data_str + self.snap_id
-        http_method = "POST"
-        params = {'start': start, 'duration': duration}
-        payload = self.session.create_ws_header(
-            req_path, http_method, params, data)
-        url_str = self.session.url_builder(req_path)
-
-        # response to request
-        r = requests.post(url_str, headers=payload,
-                          params=params, data=data, verify=False)
-
+        r = self.session.api.get_data(self, start, duration, channels)
         # collect data in numpy array
         d = np.fromstring(r.content, dtype='>i4')
-        h = r.headers
 
         # Check all channels are the same length
         sample_per_row = [int(numeric_string)
@@ -246,20 +232,14 @@ class Dataset:
         :returns: a dictionary which maps layer names to annotation count for layer
         """
 
-        # Create request content
-        req_path = "/services/timeseries/getCountsByLayer/" + self.snap_id
-        http_method = "GET"
-        payload = self.session.create_ws_header(
-            req_path, http_method, request_json=True)
-        url_str = self.session.url_builder(req_path)
-
         # response to request
-        r = requests.get(url_str, headers=payload, verify=False)
-        response_body = r.json()
-        if r.status_code != requests.codes.ok:
-            print(response_body)
+        response = self.session.api.get_annotation_layers(self)
+        if response.status_code != requests.codes.ok:
+            print(response.text)
             raise IeegConnectionError(
                 'Could not get annotation layers for dataset')
+
+        response_body = response.json()
         counts_by_layer = response_body['countsByLayer']['countsByLayer']
         if not counts_by_layer:
             return {}
@@ -271,66 +251,107 @@ class Dataset:
         except TypeError:
             return {e['key']: e['value'] for e in entry}
 
-    def get_annotations(self, layer_name, start_offset_usecs=None, first_result=None, max_results=None):
+    def get_annotations(self, layer_name,
+                        start_offset_usecs=None, first_result=None, max_results=None):
         """
         Returns a list of annotations in the given layer ordered by start time.
 
-        Given a Dataset ds with no new annotations being added, if ds.get_annotations('my_layer') returns 152 annotations,
-        then ds.get_annotations('my_layer', max_results=100) will return the first 100 of those and 
-        ds.get_annotations('my_layer', first_result=100, max_results=100) will return the final 52.
+        Given a Dataset ds with no new annotations being added, if ds.get_annotations('my_layer')
+        returns 152 annotations, then ds.get_annotations('my_layer', max_results=100) will return
+        the first 100 of those and ds.get_annotations('my_layer', first_result=100, max_results=100)
+        will return the final 52.
 
         :param layer_name: The annotation layer to return
-        :param start_offset_usec: If specified all returned annotations will have a start offset >= start_offset_usec
+        :param start_offset_usec: If specified all returned annotations will have a
+                                  start offset >= start_offset_usec
         :param first_result: If specified, the zero-based index of the first annotation to return.
         :param max_results: If specified, the maximum number of annotations to return.
         :returns: a list of annotations in the given layer ordered by start offset.
         """
 
-        req_path = '/services/timeseries/getTsAnnotations/' + \
-            self.snap_id + '/' + layer_name
-        http_method = "GET"
-        params = {'startOffsetUsec': start_offset_usecs,
-                  'firstResult': first_result, 'maxResults': max_results}
-
-        payload = self.session.create_ws_header(
-            req_path, http_method, query=params, request_json=True)
-        url_str = self.session.url_builder(req_path)
-        r = requests.get(url_str, headers=payload, verify=False, params=params)
-        response_body = r.json()
-        if r.status_code != requests.codes.ok:
-            print(response_body)
+        response = self.session.api.get_annotations(self, layer_name,
+                                                    start_offset_usecs=start_offset_usecs,
+                                                    first_result=first_result,
+                                                    max_results=max_results)
+        if response.status_code != requests.codes.ok:
+            print(response.text)
             raise IeegConnectionError(
                 'Could not get annotation layer ' + layer_name)
-
+        response_body = response.json()
         timeseries_annotations = response_body['timeseriesannotations']
         json_annotations = timeseries_annotations['annotations']['annotation']
 
         try:
             annotations = [Annotation(
                 self,
-                a['revId'],
-                a['timeseriesRevIds']['timeseriesRevId'],
                 a['annotator'],
                 a['type'],
-                a['description'],
+                a.get('description', ''),
                 a['layer'],
                 a['startTimeUutc'],
-                a['endTimeUutc'])
-                for a in json_annotations]
+                a['endTimeUutc'],
+                portal_id=a['revId'],
+                annotated_portal_ids=a['timeseriesRevIds']['timeseriesRevId'])
+                           for a in json_annotations]
         except TypeError:
             # If there is only one annotation in the layer,
             # json_annotations won't be a list. It'll be an annotation.
             annotations = [Annotation(
                 self,
-                json_annotations['revId'],
-                json_annotations['timeseriesRevIds']['timeseriesRevId'],
                 json_annotations['annotator'],
                 json_annotations['type'],
-                json_annotations['description'],
+                json_annotations.get('description', ''),
                 json_annotations['layer'],
                 json_annotations['startTimeUutc'],
-                json_annotations['endTimeUutc'])]
+                json_annotations['endTimeUutc'],
+                portal_id=json_annotations['revId'],
+                annotated_portal_ids=json_annotations['timeseriesRevIds']['timeseriesRevId'])]
         return annotations
+
+    def add_annotations(self, annotations):
+        """
+        Adds a collection of Annotations to this dataset.
+        """
+        response = self.session.api.add_annotations(self, annotations)
+        if response.status_code != requests.codes.ok:
+            response_body = response.text
+            print(response_body)
+            raise IeegConnectionError(
+                'Could not add annotations')
+        if self.session.mprov_listener:
+            self.session.mprov_listener.on_add_annotations(annotations)
+
+    def move_annotation_layer(self, from_layer, to_layer):
+        """
+        Moves all annotations in layer from_layer to layer to_layer.
+
+        :returns: the number of moved annotations.
+        """
+        response = self.session.api.move_annotation_layer(self, from_layer, to_layer)
+        if response.status_code != requests.codes.ok:
+            response_body = response.text
+            print(response_body)
+            raise IeegConnectionError(
+                'Could not move annotation layer ' + from_layer + ' to ' + to_layer)
+        response_body = response.json()
+        moved = response_body['tsAnnotationsMoved']['moved']
+        return int(moved)
+
+    def delete_annotation_layer(self, layer):
+        """
+        Deletes all annotations in the given layer.
+
+        :returns: the number of deleted annotations.
+        """
+        response = self.session.api.delete_annotation_layer(self, layer)
+        if response.status_code != requests.codes.ok:
+            response_body = response.text
+            print(response_body)
+            raise IeegConnectionError(
+                'Could not delete annotation layer ' + layer)
+        response_body = response.json()
+        deleted = response_body['tsAnnotationsDeleted']['noDeleted']
+        return int(deleted)
 
     @deprecated
     def getChannelLabels(self):

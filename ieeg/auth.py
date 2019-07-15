@@ -15,107 +15,82 @@
 ##################################################################################
 
 
-import hashlib
-import base64
-import datetime
-import requests
 import xml.etree.ElementTree as ET
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-from ieeg.dataset import Dataset as DS, IeegConnectionError
 from deprecation import deprecated
+from ieeg.dataset import Dataset as DS, IeegConnectionError
+from ieeg.ieeg_api import IeegApi
 
 class Session:
     """
-    Class representing Session on the platform
+    Class representing Session on the platform. Session is context manager and can be used in `with` statements to automatically close resouces.
+
+       with Session(username, password) as session:
+           ...
     """
     host = "www.ieeg.org"
     port = ""
     method = 'https://'
 
-    username = ""
-    password = ""
-
-    def __init__(self, name, pwd):
-        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+    def __init__(self, name, pwd, verify_ssl=True, mprov_listener=None):
         self.username = name
-        self.password = md5(pwd)
+        use_https = Session.method.startswith('https')
+        # Session.url_builder requires Session.port == ':8080' to use port 8080.
+        # But there shouldn't be anyone calling url_builder anyway.
+        port = Session.port[1:] if Session.port.startswith(
+            ':') else Session.port
+        self.api = IeegApi(self.username, pwd,
+                           use_https=use_https, host=Session.host, port=port, verify_ssl=verify_ssl)
+        self.mprov_listener = mprov_listener
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.close()
+
+
+    def close(self):
+        """
+        Closes Session resources. Can also use Session as a context manager in a with clause:
+            with Session(username, password) as session:
+                ...
+        """
+        self.api.close()
+
+    @deprecated
     def url_builder(self, path):
         return Session.method + Session.host + Session.port + path
-
-    def create_ws_header(self, path, http_method, query=None, payload="", request_json=False):
-        d_time = datetime.datetime.now().isoformat()
-        sig = self._signature_generator(path, http_method, d_time, query, payload)
-        headers = {'username': self.username, \
-                'timestamp': d_time, \
-                'signature': sig, \
-                'Content-Type': 'application/xml'}
-        if (request_json):
-            headers['Accept'] = 'application/json'
-        return headers
-
-    def _signature_generator(self, path, http_method, d_time, query=None, payload=""):
-        """
-        Signature Generator, used to authenticate user in portal
-        """
-
-        m = hashlib.sha256()
-
-        queries = []
-        if query:
-            for k, v in query.items():
-                if v is not None:
-                    queries.append(k + "=" + str(v))
-        query_str = "&".join(queries)
-
-        m.update(payload.encode('utf-8'))
-        payload_hash = base64.standard_b64encode(m.digest())
-
-        to_be_hashed = (self.username + "\n" +
-                        self.password + "\n" +
-                        http_method + "\n" +
-                        self.host + "\n" +
-                        path + "\n" +
-                        query_str + "\n" +
-                        d_time + "\n" +
-                        payload_hash.decode('utf-8'))
-        m2 = hashlib.sha256()
-        m2.update(to_be_hashed.encode('utf-8'))
-        return base64.standard_b64encode(m2.digest())
 
     def open_dataset(self, name):
         """
         Return a dataset object
         """
 
-        # Request location
-        get_id_by_snap_name_path = "/services/timeseries/getIdByDataSnapshotName/"
-
-        # Create request content
-        http_method = "GET"
-        req_path = get_id_by_snap_name_path + name
-        payload = self.create_ws_header(req_path, http_method, "", "")
-        url = Session.method + Session.host + Session.port + req_path
-
-        r = requests.get(url, headers=payload, verify=False)
+        get_id_response = self.api.get_dataset_id_by_name(name)
 
         # Check response
-        if r.status_code != 200:
-            print(r.text)
-            raise IeegConnectionError('Authorization failed or cannot find study ' + name)
+        if get_id_response.status_code != 200:
+            print(get_id_response.text)
+            raise IeegConnectionError(
+                'Authorization failed or cannot find study ' + name)
 
-        # Request location
-        get_time_series_url = '/services/timeseries/getDataSnapshotTimeSeriesDetails/'
+        snapshot_id = get_id_response.text
 
-        # Create request content
-        snapshot_id = r.text
-        req_path = get_time_series_url + snapshot_id
-        payload = self.create_ws_header(req_path, http_method, "", "")
-        url = Session.method + Session.host + Session.port + req_path
-        r = requests.get(url, headers=payload, verify=False)
+        time_series_details_response = self.api.get_time_series_details(
+            snapshot_id)
 
-        # Return Habitat Dataset object
-        return DS(ET.fromstring(r.text), snapshot_id, self)
+        if time_series_details_response.status_code != 200:
+            print(time_series_details_response.text)
+            raise IeegConnectionError('Authorization failed or cannot get time series details for ' +
+                                      name)
+
+        dataset = DS(ET.fromstring(
+            time_series_details_response.text), snapshot_id, self)
+
+        if self.mprov_listener:
+            self.mprov_listener.on_open_dataset(name, dataset)
+
+        return dataset
 
     def close_dataset(self, ds):
         """
@@ -128,23 +103,8 @@ class Session:
     # For backward-compatibility
     @deprecated
     def urlBuilder(self, path):
-        return Session.url_builder(path)
+        return self.url_builder(path)
 
     @deprecated
     def openDataset(self, name):
         return self.open_dataset(name)
-
-    @deprecated
-    def _createWSHeader(self, path, http_method, query, payload):
-        return self.create_ws_header(path, http_method, query, payload)
-
-
-def md5(user_string):
-    """
-    Return MD5 hashed string
-    """
-    m = hashlib.md5()
-    m.update(user_string.encode('utf-8'))
-    return m.hexdigest()
-
-
