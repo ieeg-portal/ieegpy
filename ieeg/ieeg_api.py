@@ -28,6 +28,7 @@ class IeegApi:
     _get_counts_by_layer_path = '/timeseries/getCountsByLayer/'
     _get_annotations_path = '/timeseries/getTsAnnotations/'
     _get_data_path = '/timeseries/getUnscaledTimeSeriesSetBinaryRaw/'
+    _get_montages_path = '/datasets/%s/montages'
     _add_annotations_path = '/timeseries/addAnnotationsToDataSnapshot/'
     _delete_annotation_layer_path = '/timeseries/removeTsAnnotationsByLayer/'
 
@@ -139,6 +140,15 @@ class IeegApi:
 
         response = self.http.post(url_str,
                                   params=params, data=data, headers=IeegApi._send_xml)
+        return response
+
+    def get_montages(self, dataset):
+        """
+        Returns the montages for the given dataset.
+        """
+        url_str = self.base_url + IeegApi._get_montages_path % dataset.snap_id
+
+        response = self.http.get(url_str, headers=IeegApi._accept_json)
         return response
 
     def add_annotations(self, dataset, annotations):

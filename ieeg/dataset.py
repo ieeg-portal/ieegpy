@@ -353,6 +353,19 @@ class Dataset:
         deleted = response_body['tsAnnotationsDeleted']['noDeleted']
         return int(deleted)
 
+    def get_montages(self):
+        """
+        Returns the montages associated with this Dataset.
+        """
+        response = self.session.api.get_montages(self)
+        if response.status_code != requests.codes.ok:
+            print(response.text)
+            raise IeegConnectionError(
+                'Could not get montages')
+        response_body = response.json()
+        json_montages = response_body['montages']['montage']
+        return json_montages
+
     @deprecated
     def getChannelLabels(self):
         return self.get_channel_labels()
