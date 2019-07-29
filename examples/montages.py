@@ -16,7 +16,33 @@
 
 import argparse
 import getpass
+import numpy as np
 from ieeg.auth import Session
+
+
+def montage_to_matrix(dataset, montage):
+    """
+    Returns the matrix corresponding to the given montage.
+    """
+    pairs = montage['montagePairs']['montagePair']
+    # If the montage only has one pair, pairs will be a dict instead of a list.
+    if isinstance(pairs, dict):
+        pairs = [pairs]
+    matix_columns = []
+    for pair in pairs:
+        pair_channel = pair['@channel']
+        # refChannel is optional
+        pair_ref = pair.get('@refChannel')
+        column = []
+        for label in dataset.ch_labels:
+            if label == pair_channel:
+                column.append(1)
+            elif label == pair_ref:
+                column.append(-1)
+            else:
+                column.append(0)
+        matix_columns.append(column)
+    return np.column_stack(matix_columns)
 
 
 def main():
@@ -36,11 +62,13 @@ def main():
         dataset_name = args.dataset
         dataset = session.open_dataset(dataset_name)
         montages = dataset.get_montages()
-        print(montages)
-        montage_names = [montage['@name'] for montage in montages]
-        print(montage_names)
+        for montage in montages:
+            matrix = montage_to_matrix(dataset, montage)
+            if matrix.any():
+                print(montage['@name'])
+                print(matrix)
         data = dataset.get_data(0, 1000000, [0, 1, 2])
-        print(data[0])
+        print(data.shape)
         session.close_dataset(dataset_name)
 
 
