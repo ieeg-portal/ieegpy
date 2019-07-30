@@ -45,6 +45,18 @@ def montage_to_matrix(dataset, montage):
     return np.column_stack(matix_columns)
 
 
+def get_data(dataset, start, duration, montage_channels, montage_matrix):
+    # remove columns that correspond to non-requested montage pairs.
+    requested_matrix = montage_matrix[:, montage_channels]
+    nonzero_channel_indices = requested_matrix.nonzero()[0]
+    uniq_sorted_indices = list(set(nonzero_channel_indices))
+    # remove rows of zeros (raw channels we are not using)
+    reduced_matrix = requested_matrix[~np.all(requested_matrix == 0, axis=1), :]
+    raw_data = dataset.get_data(start, duration, uniq_sorted_indices)
+    montaged_data = np.matmul(raw_data, reduced_matrix)
+    return montaged_data
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-u', '--user', required=True, help='username')
@@ -67,8 +79,13 @@ def main():
             if matrix.any():
                 print(montage['@name'])
                 print(matrix)
-        data = dataset.get_data(0, 1000000, [0, 1, 2])
-        print(data.shape)
+                montage_channels = [0]
+                if matrix.shape[1] > 1:
+                    montage_channels.append(1)
+                raw_data = dataset.get_data(0, 6000, list(range(len(dataset.ch_labels))))
+                print('raw', raw_data)
+                montaged_data = get_data(dataset, 0, 6000, montage_channels, matrix)
+                print('montaged', montaged_data)
         session.close_dataset(dataset_name)
 
 
