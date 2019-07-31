@@ -17,6 +17,7 @@
 
 import xml.etree.ElementTree as ET
 from deprecation import deprecated
+import requests
 from ieeg.dataset import Dataset as DS, IeegConnectionError
 from ieeg.ieeg_api import IeegApi
 
@@ -61,6 +62,19 @@ class Session:
     def url_builder(self, path):
         return Session.method + Session.host + Session.port + path
 
+    def _get_montages(self, dataset_id):
+        """
+        Returns the montages associated with this Dataset.
+        """
+        response = self.api.get_montages(dataset_id)
+        if response.status_code != requests.codes.ok:
+            print(response.text)
+            raise IeegConnectionError(
+                'Could not get montages')
+        response_body = response.json()
+        json_montages = response_body['montages']['montage']
+        return json_montages
+
     def open_dataset(self, name):
         """
         Return a dataset object
@@ -83,9 +97,9 @@ class Session:
             print(time_series_details_response.text)
             raise IeegConnectionError('Authorization failed or cannot get time series details for ' +
                                       name)
-
+        json_montages = self._get_montages(snapshot_id)
         dataset = DS(ET.fromstring(
-            time_series_details_response.text), snapshot_id, self)
+            time_series_details_response.text), snapshot_id, self, json_montages=json_montages)
 
         if self.mprov_listener:
             self.mprov_listener.on_open_dataset(name, dataset)

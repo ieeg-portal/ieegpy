@@ -20,38 +20,15 @@ import numpy as np
 from ieeg.auth import Session
 
 
-def montage_to_matrix(dataset, montage):
-    """
-    Returns the matrix corresponding to the given montage.
-    """
-    pairs = montage['montagePairs']['montagePair']
-    # If the montage only has one pair, pairs will be a dict instead of a list.
-    if isinstance(pairs, dict):
-        pairs = [pairs]
-    matix_columns = []
-    for pair in pairs:
-        pair_channel = pair['@channel']
-        # refChannel is optional
-        pair_ref = pair.get('@refChannel')
-        column = []
-        for label in dataset.ch_labels:
-            if label == pair_channel:
-                column.append(1)
-            elif label == pair_ref:
-                column.append(-1)
-            else:
-                column.append(0)
-        matix_columns.append(column)
-    return np.column_stack(matix_columns)
-
-
 def get_data(dataset, start, duration, montage_channels, montage_matrix):
     # remove columns that correspond to non-requested montage pairs.
     requested_matrix = montage_matrix[:, montage_channels]
+    # figure out the raw channels we need to request in order to caclulate montage
     nonzero_channel_indices = requested_matrix.nonzero()[0]
-    uniq_sorted_indices = list(set(nonzero_channel_indices))
+    uniq_sorted_indices = list(set(nonzero_channel_indices)).sort()
     # remove rows of zeros (raw channels we are not using)
-    reduced_matrix = requested_matrix[~np.all(requested_matrix == 0, axis=1), :]
+    reduced_matrix = requested_matrix[~np.all(
+        requested_matrix == 0, axis=1), :]
     raw_data = dataset.get_data(start, duration, uniq_sorted_indices)
     montaged_data = np.matmul(raw_data, reduced_matrix)
     return montaged_data
@@ -64,6 +41,7 @@ def main():
                         help='password (will be prompted if missing)')
 
     parser.add_argument('dataset', help='dataset name')
+    parser.add_argument('montage', nargs='?', help='montage name')
 
     args = parser.parse_args()
 
@@ -73,19 +51,25 @@ def main():
     with Session(args.user, args.password) as session:
         dataset_name = args.dataset
         dataset = session.open_dataset(dataset_name)
-        montages = dataset.get_montages()
-        for montage in montages:
-            matrix = montage_to_matrix(dataset, montage)
-            if matrix.any():
-                print(montage['@name'])
-                print(matrix)
-                montage_channels = [0]
-                if matrix.shape[1] > 1:
-                    montage_channels.append(1)
-                raw_data = dataset.get_data(0, 6000, list(range(len(dataset.ch_labels))))
-                print('raw', raw_data)
-                montaged_data = get_data(dataset, 0, 6000, montage_channels, matrix)
-                print('montaged', montaged_data)
+        montages = dataset.montages
+        if not args.montage:
+            for name, montage_list in montages.items():
+                for montage in montage_list:
+                    print(name, montage.portal_id, montage.pairs)
+        else:
+            montage = montages[args.montage][0]
+            matrix = montage.matrix
+            print(montage)
+            print(matrix)
+            montage_channels = [0]
+            if matrix.shape[1] > 1:
+                montage_channels.append(1)
+            raw_data = dataset.get_data(
+                0, 6000, list(range(len(dataset.ch_labels))))
+            print('raw', raw_data)
+            montaged_data = get_data(
+                dataset, 0, 6000, montage_channels, matrix)
+            print('montaged', montaged_data)
         session.close_dataset(dataset_name)
 
 

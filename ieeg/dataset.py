@@ -120,6 +120,54 @@ class Annotation:
         return "annotation(" + self.portal_id + "): " + self.type + "(" + str(self.start_time_offset_usec) + ", " + str(self.end_time_offset_usec) + ")"
 
 
+class Montage:
+    """
+    A montage.
+
+    Attributes:
+    parent: The dataset to which the montage applies.
+    portal_id: The montage's id on ieeg.org.
+    name: The montage's name. May not be unique.
+    pairs: The list of channel label pairs in the montage
+           in the form {'@channel': string, '@refChannel': optional string}.
+    matrix: A matrix representation of the montage.
+    """
+
+    def __init__(self, dataset_parent, portal_id, name, pairs):
+        self.parent = dataset_parent
+        self.portal_id = portal_id
+        self.name = name
+        # If the montage only has one pair, pairs will be a dict instead of a list.
+        self.pairs = [pairs] if isinstance(pairs, dict) else pairs
+        self.matrix = self._calculate_matrix()
+
+    def _calculate_matrix(self):
+        """
+        Returns the matrix corresponding to this montage with respect parent dataset.
+        """
+        matrix_columns = []
+        for pair in self.pairs:
+            pair_channel = pair['@channel']
+            # refChannel is optional
+            pair_ref = pair.get('@refChannel')
+            column = [0] * len(self.parent.ch_labels)
+            try:
+                chan_index = self.parent.ch_labels.index(pair_channel)
+                column[chan_index] = 1
+            except ValueError:
+                pass
+            try:
+                ref_index = self.parent.ch_labels.index(pair_ref)
+                column[ref_index] = -1
+            except ValueError:
+                pass
+            matrix_columns.append(column)
+        return np.column_stack(matrix_columns)
+
+    def __repr__(self):
+        return "montage(" + self.name + "): " + str(self.pairs)
+
+
 class Dataset:
     """
     Class representing Dataset on the platform
@@ -130,7 +178,7 @@ class Dataset:
     ch_labels = []  # Channel Labels
     ts_array = []   # Channel
 
-    def __init__(self, ts_details, snapshot_id, parent):
+    def __init__(self, ts_details, snapshot_id, parent, json_montages=None):
         # type: (xml.etree.Element, str, ieeg.auth.Session) -> None
         self.session = parent
         self.snap_id = snapshot_id
@@ -154,6 +202,8 @@ class Dataset:
             self.ts_array.append(dt)
             self.ts_details[name] = details
             self.ts_details_by_id[portal_id] = details
+            self.montages = self._populate_montages(json_montages if json_montages else [])
+            self.current_montage = None
 
     def __repr__(self):
         return "Dataset with: " + str(len(self.ch_labels)) + " channels."
@@ -181,6 +231,38 @@ class Dataset:
         :return: object of type TimeSeriesDetails
         """
         return self.ts_details[label]
+
+    def set_current_montage(self, montage_name, portal_id=None):
+        """
+        Sets the current montage to the named montage.
+        """
+        if montage_name is None:
+            self.current_montage = None
+            return
+
+        montages_with_name = self.montages[montage_name]
+        if len(montages_with_name) == 1:
+            self.current_montage = montages_with_name[0]
+        else:
+            new_montage = None
+            for montage in montages_with_name:
+                if montage.portal_id == portal_id:
+                    new_montage = montage
+                    break
+            if new_montage:
+                self.current_montage = new_montage
+            else:
+                raise ValueError('Montage '
+                                 + montage_name
+                                 + ', id '
+                                 + portal_id
+                                 + ' does not exist')
+
+    def get_current_montage(self):
+        """
+        Returns the current montage
+        """
+        return self.current_montage
 
     def get_data(self, start, duration, channels):
         """
@@ -292,7 +374,7 @@ class Dataset:
                 a['endTimeUutc'],
                 portal_id=a['revId'],
                 annotated_portal_ids=a['timeseriesRevIds']['timeseriesRevId'])
-                           for a in json_annotations]
+                for a in json_annotations]
         except TypeError:
             # If there is only one annotation in the layer,
             # json_annotations won't be a list. It'll be an annotation.
@@ -327,7 +409,8 @@ class Dataset:
 
         :returns: the number of moved annotations.
         """
-        response = self.session.api.move_annotation_layer(self, from_layer, to_layer)
+        response = self.session.api.move_annotation_layer(
+            self, from_layer, to_layer)
         if response.status_code != requests.codes.ok:
             response_body = response.text
             print(response_body)
@@ -353,18 +436,29 @@ class Dataset:
         deleted = response_body['tsAnnotationsDeleted']['noDeleted']
         return int(deleted)
 
-    def get_montages(self):
+    def _populate_montages(self, json_montages):
         """
-        Returns the montages associated with this Dataset.
+        Returns map of Montage name to list of Montages with that name.
+        Montages with the same name can be distinguished by Montage.portal_id.
         """
-        response = self.session.api.get_montages(self)
-        if response.status_code != requests.codes.ok:
-            print(response.text)
-            raise IeegConnectionError(
-                'Could not get montages')
-        response_body = response.json()
-        json_montages = response_body['montages']['montage']
-        return json_montages
+        as_recorded_pairs = [{'@channel': label}
+                             for label in self.ch_labels]
+        as_recorded_montage = Montage(
+            self, None, 'As Recorded', as_recorded_pairs)
+        montages = {}
+        montages[as_recorded_montage.name] = [as_recorded_montage]
+        for json_montage in json_montages:
+            montage = Montage(self,
+                              json_montage['@serverId'],
+                              json_montage['@name'],
+                              json_montage['montagePairs']['montagePair'])
+            if montage.matrix.any():
+                same_name = montages.get(montage.name)
+                if same_name:
+                    same_name.append(montage)
+                else:
+                    montages[montage.name] = [montage]
+        return montages
 
     @deprecated
     def getChannelLabels(self):

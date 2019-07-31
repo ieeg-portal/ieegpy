@@ -142,11 +142,11 @@ class IeegApi:
                                   params=params, data=data, headers=IeegApi._send_xml)
         return response
 
-    def get_montages(self, dataset):
+    def get_montages(self, dataset_id):
         """
         Returns the montages for the given dataset.
         """
-        url_str = self.base_url + IeegApi._get_montages_path % dataset.snap_id
+        url_str = self.base_url + IeegApi._get_montages_path % dataset_id
 
         response = self.http.get(url_str, headers=IeegApi._accept_json)
         return response
