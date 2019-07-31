@@ -209,8 +209,7 @@ class Dataset:
                            for numeric_string in r.headers['voltage-conversion-factors-mv'].split(',')])
 
         # Reshape to 2D array and Multiply by conversionFactor
-        d2 = np.transpose(np.reshape(d, (len(sample_per_row), -1))) * conv_f[np.newaxis, :]
-
+        d2 = np.reshape(d, (-1, len(sample_per_row)), order='F') * conv_f[np.newaxis, :]
 
         return d2
 
