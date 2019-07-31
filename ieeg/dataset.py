@@ -69,7 +69,7 @@ class Annotation:
         layer: The layer
         start_time_offset_usec: The start time of this Annotations.
                                 In microseconds since the recording start.
-        end_time_offset_usec: The end time of this Annotation. 
+        end_time_offset_usec: The end time of this Annotation.
                               In microseconds since the recording start.
     """
 
@@ -209,7 +209,8 @@ class Dataset:
                            for numeric_string in r.headers['voltage-conversion-factors-mv'].split(',')])
 
         # Reshape to 2D array and Multiply by conversionFactor
-        d2 = np.reshape(d, (-1, len(sample_per_row))) * conv_f[np.newaxis, :]
+        d2 = np.transpose(np.reshape(d, (len(sample_per_row), -1))) * conv_f[np.newaxis, :]
+
 
         return d2
 
