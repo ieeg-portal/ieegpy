@@ -196,7 +196,7 @@ class Dataset:
 
         r = self.session.api.get_data(self, start, duration, channels)
         # collect data in numpy array
-        d = np.fromstring(r.content, dtype='>i4')
+        d = np.frombuffer(r.content, dtype='>i4')
 
         # Check all channels are the same length
         sample_per_row = [int(numeric_string)
