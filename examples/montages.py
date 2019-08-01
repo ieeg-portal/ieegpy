@@ -20,10 +20,14 @@ from ieeg.auth import Session
 
 
 def main():
+    """
+    Print all montages for given dataset if no montage is specified.
+    Or get small amount of montaged data if a montage is specified.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('-u', '--user', required=True, help='username')
     parser.add_argument('-p', '--password',
-                        help='password (will be prompted if missing)')
+                        help='password (will be prompted if omitted)')
 
     parser.add_argument('dataset', help='dataset name')
     parser.add_argument('montage', nargs='?', help='montage name')
@@ -43,6 +47,7 @@ def main():
                     print(name, montage.portal_id, montage.pairs)
         else:
             assert dataset.get_current_montage() is None
+            # Requesting unrealisticly short durations to verify montage arithmetic.
             raw_data = dataset.get_data(
                 0, 8000, list(range(len(dataset.ch_labels))))
             print('raw', raw_data)

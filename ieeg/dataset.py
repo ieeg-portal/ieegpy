@@ -168,13 +168,17 @@ class Montage:
 
     def get_montage_info(self, montage_channels):
         """
-        Returns a two-element tuple with the information necessary to get data from ieeg.org.
+        Returns a two-element tuple with the information necessary to compute the requested
+        channels in this montage with data from ieeg.org.
 
         The first element is a list of the raw channel indices required to compute the montage
         for the requested montage_channels.
 
         The second element is a 2D array that will compute the montaged data when multuplied to
         the unmontaged data from ieeg.org.
+
+        If the return value is (raw_channels, montage_matrix), then the shape of montage_matrix
+        is len(raw_channels) rows by len(montage_channels) columns.
         """
         key = tuple(montage_channels)
         cached_info = self.montage_channels_to_info.get(key)
