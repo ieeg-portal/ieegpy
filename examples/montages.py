@@ -57,16 +57,19 @@ def main():
                 for montage in montage_list:
                     print(name, montage.portal_id, montage.pairs)
         else:
-            montage = montages[args.montage][0]
+            dataset.set_current_montage(args.montage)
+            montage = dataset.get_current_montage()
             matrix = montage.matrix
             print(montage)
             print(matrix)
-            montage_channels = [0]
-            if matrix.shape[1] > 1:
-                montage_channels.append(1)
+
             raw_data = dataset.get_data(
                 0, 6000, list(range(len(dataset.ch_labels))))
             print('raw', raw_data)
+
+            montage_channels = [0]
+            if matrix.shape[1] > 1:
+                montage_channels.append(1)
             montaged_data = get_data(
                 dataset, 0, 6000, montage_channels, matrix)
             print('montaged', montaged_data)
