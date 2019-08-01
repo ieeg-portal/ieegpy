@@ -69,7 +69,7 @@ class Annotation:
         layer: The layer
         start_time_offset_usec: The start time of this Annotations.
                                 In microseconds since the recording start.
-        end_time_offset_usec: The end time of this Annotation. 
+        end_time_offset_usec: The end time of this Annotation.
                               In microseconds since the recording start.
     """
 
@@ -278,7 +278,7 @@ class Dataset:
 
         r = self.session.api.get_data(self, start, duration, channels)
         # collect data in numpy array
-        d = np.fromstring(r.content, dtype='>i4')
+        d = np.frombuffer(r.content, dtype='>i4')
 
         # Check all channels are the same length
         sample_per_row = [int(numeric_string)
@@ -291,7 +291,7 @@ class Dataset:
                            for numeric_string in r.headers['voltage-conversion-factors-mv'].split(',')])
 
         # Reshape to 2D array and Multiply by conversionFactor
-        d2 = np.reshape(d, (-1, len(sample_per_row))) * conv_f[np.newaxis, :]
+        d2 = np.reshape(d, (-1, len(sample_per_row)), order='F') * conv_f[np.newaxis, :]
 
         return d2
 
