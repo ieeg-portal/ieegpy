@@ -16,22 +16,7 @@
 
 import argparse
 import getpass
-import numpy as np
 from ieeg.auth import Session
-
-
-def get_data(dataset, start, duration, montage_channels, montage_matrix):
-    # remove columns that correspond to non-requested montage pairs.
-    requested_matrix = montage_matrix[:, montage_channels]
-    # figure out the raw channels we need to request in order to caclulate montage
-    nonzero_channel_indices = requested_matrix.nonzero()[0]
-    uniq_sorted_indices = list(set(nonzero_channel_indices)).sort()
-    # remove rows of zeros (raw channels we are not using)
-    reduced_matrix = requested_matrix[~np.all(
-        requested_matrix == 0, axis=1), :]
-    raw_data = dataset.get_data(start, duration, uniq_sorted_indices)
-    montaged_data = np.matmul(raw_data, reduced_matrix)
-    return montaged_data
 
 
 def main():
@@ -57,22 +42,21 @@ def main():
                 for montage in montage_list:
                     print(name, montage.portal_id, montage.pairs)
         else:
-            dataset.set_current_montage(args.montage)
-            montage = dataset.get_current_montage()
-            matrix = montage.matrix
-            print(montage)
-            print(matrix)
-
+            assert dataset.get_current_montage() is None
             raw_data = dataset.get_data(
-                0, 6000, list(range(len(dataset.ch_labels))))
+                0, 8000, list(range(len(dataset.ch_labels))))
             print('raw', raw_data)
 
+            dataset.set_current_montage(args.montage)
+            montage = dataset.get_current_montage()
+            print(montage)
             montage_channels = [0]
-            if matrix.shape[1] > 1:
+            if len(montage.pairs) > 1:
                 montage_channels.append(1)
-            montaged_data = get_data(
-                dataset, 0, 6000, montage_channels, matrix)
-            print('montaged', montaged_data)
+            montaged_data = dataset.get_data(0, 4000, montage_channels)
+            print('montaged 1', montaged_data)
+            montaged_data = dataset.get_data(4000, 4000, montage_channels)
+            print('montaged 2', montaged_data)
         session.close_dataset(dataset_name)
 
 

@@ -140,6 +140,8 @@ class Montage:
         # If the montage only has one pair, pairs will be a dict instead of a list.
         self.pairs = [pairs] if isinstance(pairs, dict) else pairs
         self.matrix = self._calculate_matrix()
+        # A cache mapping montage channel indices tuples to the info returned by get_montage_info(...)
+        self.montage_channels_to_info = {} 
 
     def _calculate_matrix(self):
         """
@@ -163,6 +165,33 @@ class Montage:
                 pass
             matrix_columns.append(column)
         return np.column_stack(matrix_columns)
+
+    def get_montage_info(self, montage_channels):
+        """
+        Returns a two-element tuple with the information necessary to get data from ieeg.org.
+
+        The first element is a list of the raw channel indices required to compute the montage
+        for the requested montage_channels.
+
+        The second element is a 2D array that will compute the montaged data when multuplied to
+        the unmontaged data from ieeg.org.
+        """
+        key = tuple(montage_channels)
+        cached_info = self.montage_channels_to_info.get(key)
+        if cached_info:
+            return cached_info
+        # remove columns that correspond to non-requested montage pairs.
+        requested_matrix = self.matrix[:, montage_channels]
+        # figure out the raw channels we need to request in order to caclulate montage
+        nonzero_channel_indices = requested_matrix.nonzero()[0]
+        uniq_sorted_indices = list(set(nonzero_channel_indices))
+        uniq_sorted_indices.sort()
+        # remove rows of zeros (raw channels we are not using)
+        reduced_matrix = requested_matrix[~np.all(
+            requested_matrix == 0, axis=1), :]
+        computed_info = (uniq_sorted_indices, reduced_matrix)
+        self.montage_channels_to_info[key] = computed_info
+        return computed_info
 
     def __repr__(self):
         return "montage(" + self.name + "): " + str(self.pairs)
@@ -235,6 +264,7 @@ class Dataset:
     def set_current_montage(self, montage_name, portal_id=None):
         """
         Sets the current montage to the named montage.
+        Use None to clear current montage.
         """
         if montage_name is None:
             self.current_montage = None
@@ -264,19 +294,19 @@ class Dataset:
         """
         return self.current_montage
 
-    def get_data(self, start, duration, channels):
+    def _get_unmontaged_data(self, start, duration, raw_channels):
         """
-        Returns data from the IEEG platform
+        Returns unmontaged data from the IEEG platform
         :param start: Start time (usec)
         :param duration: Number of usec to request samples from
-        :param channels: Integer indices of the channels we want
+        :param raw_channels: Integer indices of the channels we want
         :return: 2D array, rows = samples, columns = channels
         """
 
         def all_same(items):
             return all(x == items[0] for x in items)
 
-        r = self.session.api.get_data(self, start, duration, channels)
+        r = self.session.api.get_data(self, start, duration, raw_channels)
         # collect data in numpy array
         d = np.frombuffer(r.content, dtype='>i4')
 
@@ -294,6 +324,24 @@ class Dataset:
         d2 = np.reshape(d, (-1, len(sample_per_row)), order='F') * conv_f[np.newaxis, :]
 
         return d2
+
+    def get_data(self, start, duration, channels):
+        """
+        Returns data from the IEEG platform using the current montage if any.
+        :param start: Start time (usec)
+        :param duration: Number of usec to request samples from
+        :param channels: Integer indices of the channels we want.
+                         If the current montage is set, the indices
+                         are interpreted as montage channels.
+        :return: 2D array, rows = samples, columns = channels
+        """
+
+        if not self.current_montage:
+            return self._get_unmontaged_data(start, duration, channels)
+        
+        raw_channels, montage_matrix = self.current_montage.get_montage_info(channels)
+        raw_data = self._get_unmontaged_data(start, duration, raw_channels)
+        return np.matmul(raw_data, montage_matrix)
 
     def get_dataframe(self, start, duration, channels):
         """
@@ -441,12 +489,7 @@ class Dataset:
         Returns map of Montage name to list of Montages with that name.
         Montages with the same name can be distinguished by Montage.portal_id.
         """
-        as_recorded_pairs = [{'@channel': label}
-                             for label in self.ch_labels]
-        as_recorded_montage = Montage(
-            self, None, 'As Recorded', as_recorded_pairs)
         montages = {}
-        montages[as_recorded_montage.name] = [as_recorded_montage]
         for json_montage in json_montages:
             montage = Montage(self,
                               json_montage['@serverId'],
