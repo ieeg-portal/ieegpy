@@ -242,6 +242,8 @@ class Dataset:
     ch_labels = []  # Channel Labels
     ts_array = []   # Channel
 
+    _SERVER_GAP_VALUE = np.iinfo(np.int32).min
+
     def __init__(self, ts_details, snapshot_id, parent, json_montages=None):
         # type: (xml.etree.Element, str, ieeg.auth.Session) -> None
         self.session = parent
@@ -342,24 +344,28 @@ class Dataset:
         def all_same(items):
             return all(x == items[0] for x in items)
 
-        r = self.session.api.get_data(self, start, duration, raw_channels)
+        response = self.session.api.get_data(
+            self, start, duration, raw_channels)
         # collect data in numpy array
-        d = np.frombuffer(r.content, dtype='>i4')
+        int_array = np.frombuffer(response.content, dtype='>i4')
 
         # Check all channels are the same length
         sample_per_row = [int(numeric_string)
-                          for numeric_string in r.headers['samples-per-row'].split(',')]
+                          for numeric_string in response.headers['samples-per-row'].split(',')]
         if not all_same(sample_per_row):
             raise IeegConnectionError(
                 'Not all channels in response have equal length')
 
         conv_f = np.array([float(numeric_string)
-                           for numeric_string in r.headers['voltage-conversion-factors-mv'].split(',')])
+                           for numeric_string in response.headers['voltage-conversion-factors-mv'].split(',')])
 
         # Reshape to 2D array and Multiply by conversionFactor
-        d2 = np.reshape(d, (-1, len(sample_per_row)), order='F') * conv_f[np.newaxis, :]
+        int_matrix = np.reshape(
+            int_array, (-1, len(sample_per_row)), order='F')
+        unmontaged_data = int_matrix * conv_f[np.newaxis, :]
+        unmontaged_data[int_matrix == Dataset._SERVER_GAP_VALUE] = np.nan
 
-        return d2
+        return unmontaged_data
 
     def get_data(self, start, duration, channels):
         """
