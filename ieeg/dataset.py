@@ -130,7 +130,9 @@ class Montage:
     name: The montage's name. May not be unique.
     pairs: The list of channel label pairs in the montage
            in the form {'@channel': string, '@refChannel': optional string}.
-    matrix: A matrix representation of the montage.
+    matrix: A NumPy matrix representation of the montage with respect to the parent dataset.
+            Shape is n x m where n is # of channels in the dataset and m is # of channel
+            pairs in the Montage.
     """
 
     def __init__(self, dataset_parent, portal_id, name, pairs):
@@ -139,9 +141,10 @@ class Montage:
         self.name = name
         # If the montage only has one pair, pairs will be a dict instead of a list.
         self.pairs = [pairs] if isinstance(pairs, dict) else pairs
-        self.matrix = self._calculate_matrix()
-        # A cache mapping montage channel indices tuples to the info returned by get_montage_info(...)
-        self.montage_channels_to_info = {} 
+        self._matrix = self._calculate_matrix()
+        # A cache mapping montage channel indices tuples to the info
+        # returned by get_montage_info(...)
+        self._montage_channels_to_info = {}
 
     def _calculate_matrix(self):
         """
@@ -166,6 +169,34 @@ class Montage:
             matrix_columns.append(column)
         return np.column_stack(matrix_columns)
 
+    @classmethod
+    def create_montage_map(cls, dataset, json_montages):
+        """
+        Returns map of Montage name to list of Montages with that name.
+        Montages with the same name can be distinguished by Montage.portal_id.
+        """
+        montages = {}
+        for json_montage in json_montages:
+            montage = cls(dataset,
+                          json_montage['@serverId'],
+                          json_montage['@name'],
+                          json_montage['montagePairs']['montagePair'])
+            if montage.size() > 0:
+                same_name = montages.get(montage.name)
+                if same_name:
+                    same_name.append(montage)
+                else:
+                    montages[montage.name] = [montage]
+        return montages
+
+    def size(self):
+        """
+        Returns the actual number of montage channels with respect to the parent dataset.
+        May be smaller than the length of pairs if some pairs refer to labels that do
+        not exist in the parent dataset.
+        """
+        return np.count_nonzero(np.count_nonzero(self._matrix, axis=0))
+
     def get_montage_info(self, montage_channels):
         """
         Returns a two-element tuple with the information necessary to compute the requested
@@ -181,11 +212,11 @@ class Montage:
         is len(raw_channels) rows by len(montage_channels) columns.
         """
         key = tuple(montage_channels)
-        cached_info = self.montage_channels_to_info.get(key)
+        cached_info = self._montage_channels_to_info.get(key)
         if cached_info:
             return cached_info
         # remove columns that correspond to non-requested montage pairs.
-        requested_matrix = self.matrix[:, montage_channels]
+        requested_matrix = self._matrix[:, montage_channels]
         # figure out the raw channels we need to request in order to caclulate montage
         nonzero_channel_indices = requested_matrix.nonzero()[0]
         uniq_sorted_indices = list(set(nonzero_channel_indices))
@@ -194,7 +225,7 @@ class Montage:
         reduced_matrix = requested_matrix[~np.all(
             requested_matrix == 0, axis=1), :]
         computed_info = (uniq_sorted_indices, reduced_matrix)
-        self.montage_channels_to_info[key] = computed_info
+        self._montage_channels_to_info[key] = computed_info
         return computed_info
 
     def __repr__(self):
@@ -216,9 +247,9 @@ class Dataset:
         self.session = parent
         self.snap_id = snapshot_id
         # only one details in timeseriesdetails
-        details = ts_details.findall('details')[0]
+        xml_details = ts_details.findall('details')[0]
 
-        for dt in details.findall('detail'):
+        for dt in xml_details.findall('detail'):
             # ET.dump(dt)
             name = dt.findall('channelLabel')[0].text
             portal_id = dt.findall('revisionId')[0].text
@@ -235,8 +266,9 @@ class Dataset:
             self.ts_array.append(dt)
             self.ts_details[name] = details
             self.ts_details_by_id[portal_id] = details
-            self.montages = self._populate_montages(json_montages if json_montages else [])
-            self.current_montage = None
+
+        self.montages = Montage.create_montage_map(self, json_montages if json_montages else [])
+        self.current_montage = None
 
     def __repr__(self):
         return "Dataset with: " + str(len(self.ch_labels)) + " channels."
@@ -342,7 +374,7 @@ class Dataset:
 
         if not self.current_montage:
             return self._get_unmontaged_data(start, duration, channels)
-        
+
         raw_channels, montage_matrix = self.current_montage.get_montage_info(channels)
         raw_data = self._get_unmontaged_data(start, duration, raw_channels)
         return np.matmul(raw_data, montage_matrix)
@@ -487,25 +519,6 @@ class Dataset:
         response_body = response.json()
         deleted = response_body['tsAnnotationsDeleted']['noDeleted']
         return int(deleted)
-
-    def _populate_montages(self, json_montages):
-        """
-        Returns map of Montage name to list of Montages with that name.
-        Montages with the same name can be distinguished by Montage.portal_id.
-        """
-        montages = {}
-        for json_montage in json_montages:
-            montage = Montage(self,
-                              json_montage['@serverId'],
-                              json_montage['@name'],
-                              json_montage['montagePairs']['montagePair'])
-            if montage.matrix.any():
-                same_name = montages.get(montage.name)
-                if same_name:
-                    same_name.append(montage)
-                else:
-                    montages[montage.name] = [montage]
-        return montages
 
     @deprecated
     def getChannelLabels(self):

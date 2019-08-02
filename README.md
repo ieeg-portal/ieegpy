@@ -39,8 +39,8 @@ You will need to install the library to run the programs in the `example` direct
 
 ### Session (ieeg.auth)
 
-* `open_dataset`(name):  fetches the metadata for an IEEG dataset, by its unique ID.  Returns a `TimeSeriesDetails` object.
-* `close_dataset`(ds):  closes the connection for an IEEG dataset associated with a `TimeSeriesDetails` object.
+* `open_dataset`(name):  fetches the metadata for an IEEG dataset, by its unique ID.  Returns a `Dataset` object.
+* `close_dataset`(ds):  closes the connection for an IEEG dataset associated with a `Dataset` object.
 
 ### TimeSeriesDetails (ieeg.dataset)
 
@@ -66,15 +66,28 @@ You may access any of the following variables:
 * `start_time_offset_usec`: The start time of this Annotations. In microseconds since the recording start.
 * `end_time_offset_usec`: The end time of this Annotation. In microseconds since the recording start.
 
+### Montage (ieeg.dataset)
+
+You may access any of the following variables:
+* `parent`: The dataset to which the montage applies.
+* `portal_id`: The montage's id on ieeg.org.
+* `name`: The montage's name. Might not be unique.
+* `pairs`: The list of channel label pairs in the montage
+           in the form `{'@channel':` string`, '@refChannel': `optional string`}`.
+
 ### Dataset (ieeg.dataset)
 
 * `get_channel_labels()`: Returns an ordered list of channel labels
 * `get_time_series_details(label)`: Returns a `TimeSeriesDetails` for the named channel
 * `get_channel_indices(list_of_labels)`: Takes a list of channel labels, and returns a list of channel indices.
-* `get_data(start_offset, duration, list_of_channels)`: Given a start offset (in usec) and a duration, read all of the corresponding samples for the channels specified in `list_of_channels`.  Note that the list is the *indices* of the channels, as opposed to their labels.  You can call `get_channel_indices` to convert from labels to indices.  The result is a 2D array with one column per channel, and one row per sample.  We assume all channels are sampled at the same rate.
+* `get_data(start_offset, duration, list_of_channels)`: Given a start offset (in usec) and a duration, read all of the corresponding samples for the channels specified in `list_of_channels`.  Note that the list is the *indices* of the channels, as opposed to their labels.  You can call `get_channel_indices` to convert from labels to indices.  The result is a 2D array with one column per channel, and one row per sample.  We assume all channels are sampled at the same rate. If the current montage is set, then `list_of_channels` refers to the indices of the Montage pairs and the 
+returned data will be in the current Montage.
 * `get_dataframe(start_offset, duration, list_of_channels)`: Given a start offset (in usec) and a duration, read all of the corresponding samples for the channels specified in `list_of_channels`.  Note that the list is the *indices* of the channels, as opposed to their labels.  You can call `get_channel_indices` to convert from labels to indices.  The result is a Pandas Dataframe in which the columns are the (labeled) channels.
 * `add_annotations(annotations)`: Adds the given list of `Annotation`s to this `Dataset`.
 * `get_annotation_layers()`: Returns a dictionary mapping annotatation layer names to the number of annotations in that layer.
 * `get_annotations(layer_name, start_offset_usecs=None, first_result=None, max_results=None)`: Returns a list of annotations from the given layer ordered by the annotations' `start_time_offset_usec` attribute. If `start_offset_usecs` is given, then only annotations with a `start_time_offset_usec` attribute greater than or equal to `start_offset_usecs` will be returned. If `first_result` and `max_results` are specified, then the list will contain at most `max_results` annotations starting with the annotation at the zero-based "index" `first_result`. Otherwise, all annotations in the layer will be returned.
 * `move_annotation_layer(from_layer, to_layer)`: Moves all annotations in layer `from_layer` to layer `to_layer`. Returns the number of moved annotations.
 * `delete_annotation_layer(layer)`: Deletes all annotations in the given layer. Returns the number of deleted annotations.
+* `set_current_montage(montage_name, portal_id=None)`: Sets the current montage to the named Montage. Use None to clear current montage. If more than one
+montage exists with the given name, use `portal_id` to specify the desired Montage. The `montages` attribute of `Dataset` is a map of the available Montages by name.
+* `get_current_montage()`: Returns the current montage.
