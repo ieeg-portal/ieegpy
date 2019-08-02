@@ -72,7 +72,11 @@ class Session:
             raise IeegConnectionError(
                 'Could not get montages')
         response_body = response.json()
-        json_montages = response_body['montages']['montage']
+        # If there is just one montage, response will be a single
+        # montage and not an array.
+        single_montage_or_list = response_body['montages']['montage']
+        json_montages = [single_montage_or_list] if isinstance(
+            single_montage_or_list, dict) else single_montage_or_list
         return json_montages
 
     def open_dataset(self, name):
