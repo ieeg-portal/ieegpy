@@ -350,18 +350,18 @@ class Dataset:
         int_array = np.frombuffer(response.content, dtype='>i4')
 
         # Check all channels are the same length
-        sample_per_row = [int(numeric_string)
+        samples_per_row_array = [int(numeric_string)
                           for numeric_string in response.headers['samples-per-row'].split(',')]
-        if not all_same(sample_per_row):
+        if not all_same(samples_per_row_array):
             raise IeegConnectionError(
                 'Not all channels in response have equal length')
-
+        samples_per_row = samples_per_row_array[0]
         conv_f = np.array([float(numeric_string)
                            for numeric_string in response.headers['voltage-conversion-factors-mv'].split(',')])
 
         # Reshape to 2D array and Multiply by conversionFactor
         int_matrix = np.reshape(
-            int_array, (-1, len(sample_per_row)), order='F')
+            int_array, (samples_per_row, len(raw_channels)), order='F')
         unmontaged_data = int_matrix * conv_f[np.newaxis, :]
         unmontaged_data[int_matrix == Dataset._SERVER_GAP_VALUE] = np.nan
 
