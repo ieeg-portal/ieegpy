@@ -73,7 +73,7 @@ You may access any of the following variables:
 * `portal_id`: The montage's id on ieeg.org.
 * `name`: The montage's name. Might not be unique.
 * `pairs`: The list of channel label pairs in the montage
-           in the form `{'@channel':` string`, '@refChannel': `optional string`}`.
+           in the form (channel label, optional reference channel label).
 
 ### Dataset (ieeg.dataset)
 

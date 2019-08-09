@@ -16,7 +16,9 @@
 
 import argparse
 import getpass
+import numpy
 from ieeg.auth import Session
+from ieeg.processing import ProcessSlidingWindowPerChannel, ProcessSlidingWindowAcrossChannels
 
 
 def main():
@@ -62,6 +64,19 @@ def main():
             print('montaged 1', montaged_data)
             montaged_data = dataset.get_data(4000, 4000, montage_channels)
             print('montaged 2', montaged_data)
+
+            montage_labels = [montage.pairs[i] for i in montage_channels]
+            print(montage_labels)
+            window_result = ProcessSlidingWindowPerChannel.execute(
+                dataset, montage_labels, 0, 4000, 4000, 8000, numpy.mean)
+            print('per channel', window_result)
+
+            def row_mean(matrix):
+                return numpy.mean(matrix, axis=1)
+
+            window_result = ProcessSlidingWindowAcrossChannels.execute(
+                dataset, montage_labels, 0, 4000, 4000, 8000, row_mean)
+            print('across channels', window_result)
         session.close_dataset(dataset_name)
 
 

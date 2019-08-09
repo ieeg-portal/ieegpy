@@ -14,6 +14,7 @@
 # limitations under the License.
 ##################################################################################
 
+from collections import namedtuple
 import requests
 import numpy as np
 import pandas as pd
@@ -119,6 +120,7 @@ class Annotation:
     def __repr__(self):
         return "annotation(" + self.portal_id + "): " + self.type + "(" + str(self.start_time_offset_usec) + ", " + str(self.end_time_offset_usec) + ")"
 
+HalfMontageChannel = namedtuple('HalfMontageChannel', ['raw_label', 'raw_index'])
 
 class Montage:
     """
@@ -129,43 +131,72 @@ class Montage:
     portal_id: The montage's id on ieeg.org.
     name: The montage's name. May not be unique.
     pairs: The list of channel label pairs in the montage
-           in the form {'@channel': string, '@refChannel': optional string}.
+           in the form (channel label, optional reference channel label).
     matrix: A NumPy matrix representation of the montage with respect to the parent dataset.
             Shape is n x m where n is # of channels in the dataset and m is # of channel
             pairs in the Montage.
     """
 
-    def __init__(self, dataset_parent, portal_id, name, pairs):
+
+    def __init__(self, dataset_parent, portal_id, name, json_pairs):
         self.parent = dataset_parent
         self.portal_id = portal_id
         self.name = name
-        # If the montage only has one pair, pairs will be a dict instead of a list.
-        self.pairs = [pairs] if isinstance(pairs, dict) else pairs
+        self.indexed_pairs = self._json_pairs_to_pairs(json_pairs)
+        self.pairs = [(channel.raw_label, reference.raw_label if reference else None) for channel, reference in self.indexed_pairs]
         self._matrix = self._calculate_matrix()
         # A cache mapping montage channel indices tuples to the info
         # returned by get_montage_info(...)
         self._montage_channels_to_info = {}
+
+
+    def _label_to_half_montage_channel(self, raw_label):
+        """
+        Returns a HalfMontageChannel for the given raw dataset channel label.
+        """
+        try:
+            chan_index = self.parent.ch_labels.index(raw_label)
+            return HalfMontageChannel(raw_label, chan_index)
+        except ValueError:
+            return HalfMontageChannel(raw_label, None)
+
+    def _json_pair_to_pair(self, json_pair):
+        """
+        Returns a (HalfMontageChannel, HalfMontageChannel) tuple given
+        a {'@channel': string, optional '@refChannel': string} dict.
+        """
+        channel_half = self._label_to_half_montage_channel(
+            json_pair['@channel'])
+        # refChannel is optional
+        reference_label = json_pair.get('@refChannel')
+        reference_half = self._label_to_half_montage_channel(
+            reference_label) if reference_label else None
+        return (channel_half, reference_half)
+
+    def _json_pairs_to_pairs(self, json_pairs):
+        """
+        Returns a list of (HalfMontageChannel, HalfMontageChannel) tuples derived
+        from json_pairs
+
+        :param json_pairs: a list of a {'@channel': string, optional '@refChannel': string}
+                           dicts or a single such dict.
+        """
+        # If the montage only has one pair, pairs will be a dict instead of a list.
+        if isinstance(json_pairs, dict):
+            return [self._json_pair_to_pair(json_pairs)]
+        return [self._json_pair_to_pair(json_pair) for json_pair in json_pairs]
 
     def _calculate_matrix(self):
         """
         Returns the matrix corresponding to this montage with respect parent dataset.
         """
         matrix_columns = []
-        for pair in self.pairs:
-            pair_channel = pair['@channel']
-            # refChannel is optional
-            pair_ref = pair.get('@refChannel')
+        for pair_channel, pair_ref in self.indexed_pairs:
             column = [0] * len(self.parent.ch_labels)
-            try:
-                chan_index = self.parent.ch_labels.index(pair_channel)
-                column[chan_index] = 1
-            except ValueError:
-                pass
-            try:
-                ref_index = self.parent.ch_labels.index(pair_ref)
-                column[ref_index] = -1
-            except ValueError:
-                pass
+            if pair_channel.raw_index is not None:
+                column[pair_channel.raw_index] = 1
+            if pair_ref and pair_ref.raw_index is not None:
+                column[pair_ref.raw_index] = -1
             matrix_columns.append(column)
         return np.column_stack(matrix_columns)
 
@@ -210,6 +241,8 @@ class Montage:
 
         If the return value is (raw_channels, montage_matrix), then the shape of montage_matrix
         is len(raw_channels) rows by len(montage_channels) columns.
+
+        :param montage_channels a list of indices into the list of pairs in this montage
         """
         key = tuple(montage_channels)
         cached_info = self._montage_channels_to_info.get(key)
@@ -285,10 +318,13 @@ class Dataset:
         """
         Create a list of indices (suitable for get_data) from a list
         of labels
-        :param list_of_labels: Ordered list of channel labels
+        :param list_of_labels: Ordered list of channel labels (or two-element tuples of labels if current_montage is set)
         :return: Ordered list of channel indices
         """
-        return [self.ch_labels.index(x) for x in list_of_labels]
+        if self.current_montage is None:
+            return [self.ch_labels.index(x) for x in list_of_labels]
+
+        return [self.current_montage.pairs.index(x) for x in list_of_labels]
 
     def get_time_series_details(self, label):
         """
