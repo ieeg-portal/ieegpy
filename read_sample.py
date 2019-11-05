@@ -29,7 +29,7 @@ default_password = 'default'
 
 if len(sys.argv) < 3:
     print('To run this sample program, you must supply your user ID and password on the command-line')
-    print('Syntax: read_sample [user id (in double-quotes if it has a space)] [password]')
+    print('Syntax: read_sample [user id (in double-quotes if it has a space)] [password] [Prov userID] [Prov Password]')
     sys.exit(1)
 
 print ('Logging into IEEG:', sys.argv[1], '/ ****')
@@ -37,6 +37,8 @@ with Session(sys.argv[1], sys.argv[2]) as s:
 
     conn = None
     if len(sys.argv) > 3:
+        default_user = sys.argv[3]
+        default_password = sys.argv[4]
         print ('Logging into local MProv: ', default_user, '/ ****')
         conn = MProvConnection(default_user, default_password, None)
         print("Successfully connected to the MProv server")
