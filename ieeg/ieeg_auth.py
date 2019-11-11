@@ -29,7 +29,7 @@ class IeegAuth(AuthBase):
         self.password = self._md5(password)
 
     def __call__(self, r):
-        d_time = datetime.datetime.now().isoformat()
+        d_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
         signature = self._signature_generator(r, d_time)
         r.headers['username'] = self.username
         r.headers['timestamp'] = d_time
