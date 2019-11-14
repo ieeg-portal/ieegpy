@@ -29,7 +29,7 @@ def dataset_required(func):
     @functools.wraps(func)
     def pass_dataset(args):
         if not args.password:
-            args.password = getpass.getpass()
+            args.password = getpass.getpass('IEEG Password: ')
         if args.mprov_user and not args.mprov_password:
             args.mprov_password = getpass.getpass('MProv Password: ')
         if args.host:

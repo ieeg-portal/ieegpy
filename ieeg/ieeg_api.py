@@ -28,6 +28,7 @@ class IeegApi:
     _get_counts_by_layer_path = '/timeseries/getCountsByLayer/'
     _get_annotations_path = '/timeseries/getTsAnnotations/'
     _get_data_path = '/timeseries/getUnscaledTimeSeriesSetBinaryRaw/'
+    _derive_dataset_path = '/timeseries/deriveDataSnapshotFull/'
     _get_montages_path = '/datasets/%s/montages'
     _add_annotations_path = '/timeseries/addAnnotationsToDataSnapshot/'
     _delete_annotation_layer_path = '/timeseries/removeTsAnnotationsByLayer/'
@@ -107,6 +108,27 @@ class IeegApi:
                   'firstResult': first_result, 'maxResults': max_results}
 
         response = self.http.get(
+            url_str, headers=IeegApi._accept_json, params=params)
+        return response
+
+    def derive_dataset(self, dataset, derived_dataset_name, tool_name):
+        """
+        Returns a Response containing the portal id of a new Dataset.
+
+        The new Dataset will have the name given in the derived_dataset_name
+        and be a copy of the given dataset.
+
+        :param dataset: The dataset to copy
+        :param derived_dataset_name: The name of the new dataset
+        :param tool_name: The name of the tool creating the new dataset
+        :returns: the portal id of the new dataset
+        """
+        url_str = self.base_url + IeegApi._derive_dataset_path + dataset.snap_id
+
+        params = {'friendlyName': derived_dataset_name,
+                  'toolName': tool_name}
+
+        response = self.http.post(
             url_str, headers=IeegApi._accept_json, params=params)
         return response
 

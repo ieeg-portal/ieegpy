@@ -91,3 +91,5 @@ returned data will be in the current Montage.
 * `set_current_montage(montage_name, portal_id=None)`: Sets the current montage to the named Montage. Use None to clear current montage. If more than one
 montage exists with the given name, use `portal_id` to specify the desired Montage. The `montages` attribute of `Dataset` is a map of the available Montages by name.
 * `get_current_montage()`: Returns the current montage.
+* `derive_dataset(derived_dataset_name, tool_name)`: Creates and returns a copy of this dataset with name `derived_dataset_name` and attributed to the tool with name `tool_name`.
+The user is the owner of the new dataset.

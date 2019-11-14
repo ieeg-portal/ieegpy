@@ -13,7 +13,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 '''
-
+import uuid
 from pennprov.connection.mprov_connection import MProvConnection
 import pennprov.models
 
@@ -147,8 +147,7 @@ class MProvListener:
         """
         mprov = self.mprov_connection
         graph = mprov.get_graph()
-        dataset_id = annotation.parent.snap_id
-        annotation_id = (dataset_id + '.' +
+        annotation_id = (str(uuid.uuid4()) + '.' +
                          annotation.layer + '.' + annotation.type)
 
         ts_coll_token = pennprov.QualifiedName(self.annotation_namespace,

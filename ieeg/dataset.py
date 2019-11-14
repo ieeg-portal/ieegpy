@@ -118,9 +118,12 @@ class Annotation:
         self.end_time_offset_usec = end_time_offset_usec
 
     def __repr__(self):
-        return "annotation(" + self.portal_id + "): " + self.type + "(" + str(self.start_time_offset_usec) + ", " + str(self.end_time_offset_usec) + ")"
+        return "annotation({}): {}({},{})".format(self.portal_id, self.type, self.start_time_offset_usec, self.end_time_offset_usec)
 
-HalfMontageChannel = namedtuple('HalfMontageChannel', ['raw_label', 'raw_index'])
+
+HalfMontageChannel = namedtuple(
+    'HalfMontageChannel', ['raw_label', 'raw_index'])
+
 
 class Montage:
     """
@@ -137,18 +140,17 @@ class Montage:
             pairs in the Montage.
     """
 
-
     def __init__(self, dataset_parent, portal_id, name, json_pairs):
         self.parent = dataset_parent
         self.portal_id = portal_id
         self.name = name
         self.indexed_pairs = self._json_pairs_to_pairs(json_pairs)
-        self.pairs = [(channel.raw_label, reference.raw_label if reference else None) for channel, reference in self.indexed_pairs]
+        self.pairs = [(channel.raw_label, reference.raw_label if reference else None)
+                      for channel, reference in self.indexed_pairs]
         self._matrix = self._calculate_matrix()
         # A cache mapping montage channel indices tuples to the info
         # returned by get_montage_info(...)
         self._montage_channels_to_info = {}
-
 
     def _label_to_half_montage_channel(self, raw_label):
         """
@@ -302,7 +304,8 @@ class Dataset:
             self.ts_details[name] = details
             self.ts_details_by_id[portal_id] = details
 
-        self.montages = Montage.create_montage_map(self, json_montages if json_montages else [])
+        self.montages = Montage.create_montage_map(
+            self, json_montages if json_montages else [])
         self.current_montage = None
 
     def __repr__(self):
@@ -310,6 +313,25 @@ class Dataset:
 
     def __str__(self):
         return "Dataset with: " + str(len(self.ch_labels)) + " channels."
+
+    def derive_dataset(self, derived_dataset_name, tool_name):
+        """
+        Returns a new Dataset which is a copy of this dataset and which has the given name.
+
+        Create a copy of this dataset with the given name and attributed to the given tool.
+
+        :param derived_dataset_name: The name of the new dataset
+        :param tool_name: The name of the tool creating the dataset
+        :return: A new Dataset which is a copy of this dataset and which has the given name.
+        """
+        response = self.session.api.derive_dataset(self,
+                                                   derived_dataset_name, tool_name)
+        if response.status_code != 200:
+            print(response.text)
+            raise IeegConnectionError(
+                'Cannot create derived Dataset ' + derived_dataset_name)
+
+        return self.session.open_dataset(derived_dataset_name)
 
     def get_channel_labels(self):
         return self.ch_labels
@@ -387,7 +409,7 @@ class Dataset:
 
         # Check all channels are the same length
         samples_per_row_array = [int(numeric_string)
-                          for numeric_string in response.headers['samples-per-row'].split(',')]
+                                 for numeric_string in response.headers['samples-per-row'].split(',')]
         if not all_same(samples_per_row_array):
             raise IeegConnectionError(
                 'Not all channels in response have equal length')
@@ -417,7 +439,8 @@ class Dataset:
         if not self.current_montage:
             return self._get_unmontaged_data(start, duration, channels)
 
-        raw_channels, montage_matrix = self.current_montage.get_montage_info(channels)
+        raw_channels, montage_matrix = self.current_montage.get_montage_info(
+            channels)
         raw_data = self._get_unmontaged_data(start, duration, raw_channels)
         return np.matmul(raw_data, montage_matrix)
 
