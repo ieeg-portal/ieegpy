@@ -173,7 +173,7 @@ class MProvListener:
             usage = pennprov.RelationModel(
                 type='USAGE', subject_id=activity_token, object_id=dataset_token, attributes=[])
             mprov.prov_dm_api.store_relation(
-                resource=graph, body=usage, label='use'
+                resource=graph, body=usage, label='used'
             )
         return activity_token
 
