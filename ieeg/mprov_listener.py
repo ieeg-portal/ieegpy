@@ -48,10 +48,15 @@ class MProvListener:
     annotated_name = pennprov.QualifiedName(
         namespace=annotation_namespace, local_part='annotated')
 
+    activity_namespace = MProvConnection.namespace + '/activity#'
+    activity_attr_name = pennprov.QualifiedName(
+        namespace=activity_namespace, local_part='name')
+
     def __init__(self, mprov_connection):
         self.mprov_connection = mprov_connection
         self.dataset_id_to_token = {}
         self.timeseries_id_to_token = {}
+        self.activity_name_to_token = {}
 
     def on_open_dataset(self, dataset_name, dataset):
         """
@@ -141,6 +146,37 @@ class MProvListener:
                                          token=token, body=entity)
         return token
 
+    def ensure_activity(self, annotation):
+        """
+        Stores an Activity
+        """
+        mprov = self.mprov_connection
+        graph = mprov.get_graph()
+        prov_api = mprov.get_low_level_api()
+        annotator = annotation.annotator
+        activity_token = activity_token = pennprov.QualifiedName(
+            self.activity_namespace, annotator)
+        try:
+            prov_api.get_provenance_data(
+                resource=graph, token=activity_token)
+        except pennprov.rest.ApiException as api_error:
+            if api_error.status != 404:
+                raise api_error
+            attributes = [pennprov.models.Attribute(
+                name=self.activity_attr_name, value=annotator, type='STRING')]
+            activity = pennprov.NodeModel(
+                type='ACTIVITY', attributes=attributes)
+            mprov.prov_dm_api.store_node(resource=graph,
+                                         token=activity_token, body=activity)
+            dataset_token = self.dataset_id_to_token.get(
+                annotation.parent.snap_id)
+            usage = pennprov.RelationModel(
+                type='USAGE', subject_id=activity_token, object_id=dataset_token, attributes=[])
+            mprov.prov_dm_api.store_relation(
+                resource=graph, body=usage, label='use'
+            )
+        return activity_token
+
     def store_annotation(self, annotation):
         """
         Stores the given annotation in the ProvDm store.
@@ -182,5 +218,16 @@ class MProvListener:
             type='ANNOTATED', subject_id=ts_coll_token, object_id=ann_token, attributes=[])
         mprov.prov_dm_api.store_relation(
             resource=graph, body=annotates, label='_annotated')
+
+        annotator = annotation.annotator
+        activity_token = self.activity_name_to_token.get(annotator)
+        if activity_token is None:
+            activity_token = self.ensure_activity(annotation)
+            self.activity_name_to_token[annotator] = activity_token
+        generation = pennprov.RelationModel(
+            type='GENERATION', subject_id=ann_token, object_id=activity_token, attributes=[])
+        mprov.prov_dm_api.store_relation(
+            resource=graph, body=generation, label='wasGeneratedBy'
+        )
 
         return ann_token

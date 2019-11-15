@@ -23,6 +23,9 @@ from ieeg.dataset import Annotation
 
 
 def annotate_dataset(dataset, layer_name, tool_name):
+    """
+    Adds test annotations to the given dataset.
+    """
     annotations = []
     annotated_labels = dataset.ch_labels
     dataset_end_time_usec = 574294000000
