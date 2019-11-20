@@ -51,7 +51,10 @@ You may access any of the following variables:
 * `min_sample` and `max_sample`: minimum and maximum integer value for each channel.
 * `voltage_conversion_factor`: factor to multiply each sample by, to get the actual voltage reading.
 * `number_of_samples`: number of samples in the channel recording.
-* `start_time`: "official" start time of the recording. For human data this is usually masked.
+* `start_time`: "official" start time of the recording in uUTC. For human data this is usually masked.
+* `end_time`: "official" end time of the recording in uUTC. For human data this is usually masked.
+* `sample_rate`: sample rate of the recording in Hz. A float.
+
 
 ### Annotation (ieeg.dataset)
 

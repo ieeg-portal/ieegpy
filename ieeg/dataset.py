@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##################################################################################
-
 from collections import namedtuple
 import requests
 import numpy as np
@@ -36,7 +35,7 @@ class TimeSeriesDetails:
     start_time = 0
     voltage_conversion_factor = 1.
 
-    def __init__(self, portal_id, name, label, duration, min_sample, max_sample, number_of_samples, start_time, voltage_conversion):
+    def __init__(self, portal_id, name, label, duration, min_sample, max_sample, number_of_samples, start_time, end_time, sample_rate, voltage_conversion):
         self.portal_id = portal_id
         self.name = name
         self.channel_label = label
@@ -45,16 +44,19 @@ class TimeSeriesDetails:
         self.max_sample = int(max_sample)
         self.number_of_samples = int(number_of_samples)
         self.start_time = int(start_time)
+        self.end_time = int(end_time)
+        self.sample_rate = float(sample_rate)
         self.voltage_conversion_factor = float(voltage_conversion)
         return
 
     def __str__(self):
-        return self.name + "(" + self.channel_label + ") spans " + \
-            str(self.duration) + " usec, range [" + str(self.min_sample) + "-" + \
-            str(self.max_sample) + "] in " + str(self.number_of_samples) + \
-            str(self.number_of_samples) + " samples.  Starts @" + str(self.start_time) + \
-            " with voltage conv factor " + str(self.voltage_conversion_factor)
-
+        return ('{}({}) spans {} usec, range [{}-{}] in {} samples. ' +
+                'Starts @{} uUTC, ends @{} uUTC ' +
+                'with sample rate {} Hz and voltage conv factor {}').format(
+                    self.name, self.channel_label, self.duration,
+                    self.min_sample, self.max_sample, self.number_of_samples,
+                    self.start_time, self.end_time, self.sample_rate,
+                    self.voltage_conversion_factor)
 
 class Annotation:
     """
@@ -279,17 +281,22 @@ class Dataset:
 
     _SERVER_GAP_VALUE = np.iinfo(np.int32).min
 
-    def __init__(self, ts_details, snapshot_id, parent, json_montages=None):
-        # type: (xml.etree.Element, str, ieeg.auth.Session) -> None
+    def __init__(self, dataset_name, ts_details, snapshot_id, parent, json_montages=None):
+        # type: (str, xml.etree.Element, str, ieeg.auth.Session) -> None
+        self.name = dataset_name
         self.session = parent
         self.snap_id = snapshot_id
         # only one details in timeseriesdetails
         xml_details = ts_details.findall('details')[0]
 
+        dataset_start_time = float('inf')
+        dataset_end_time = -1
         for dt in xml_details.findall('detail'):
             # ET.dump(dt)
             name = dt.findall('channelLabel')[0].text
             portal_id = dt.findall('revisionId')[0].text
+            start_time = int(dt.findall('startTime')[0].text)
+            end_time = int(dt.findall('endTime')[0].text)
             details = TimeSeriesDetails(portal_id,
                                         dt.findall('name')[0].text,
                                         name,
@@ -297,12 +304,21 @@ class Dataset:
                                         dt.findall('minSample')[0].text,
                                         dt.findall('maxSample')[0].text,
                                         dt.findall('numberOfSamples')[0].text,
-                                        dt.findall('startTime')[0].text,
+                                        start_time,
+                                        end_time,
+                                        dt.findall('sampleRate')[0].text,
                                         dt.findall('voltageConversionFactor')[0].text,)
             self.ch_labels.append(name)
             self.ts_array.append(dt)
             self.ts_details[name] = details
             self.ts_details_by_id[portal_id] = details
+            if start_time < dataset_start_time:
+                dataset_start_time = start_time
+            if end_time > dataset_end_time:
+                dataset_end_time = end_time
+
+        self.start_time = dataset_start_time
+        self.end_time = dataset_end_time
 
         self.montages = Montage.create_montage_map(
             self, json_montages if json_montages else [])

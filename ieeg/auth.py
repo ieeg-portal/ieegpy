@@ -102,7 +102,7 @@ class Session:
             raise IeegConnectionError('Authorization failed or cannot get time series details for ' +
                                       name)
         json_montages = self._get_montages(snapshot_id)
-        dataset = DS(ET.fromstring(
+        dataset = DS(name, ET.fromstring(
             time_series_details_response.text), snapshot_id, self, json_montages=json_montages)
 
         if self.mprov_listener:
