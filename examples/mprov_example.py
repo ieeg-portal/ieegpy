@@ -73,28 +73,6 @@ def create_annotatations(dataset, layer_name, tool_name):
     return annotations
 
 
-def annotate_dataset(dataset, annotations, tool_name):
-    """
-    Adds given annotations to the given dataset.
-    """
-    if annotations:
-        annotations_dataset = dataset.name
-        try:
-            dataset.add_annotations(annotations)
-        except IeegConnectionError as error:
-            # Not a foolproof check of no-write-access vs something else,
-            # but best we can do at the moment.
-            if not error.value.startswith('Could not add annotations'):
-                raise error
-            else:
-                annotations_dataset = dataset.name + ' copy'
-                # Copy dataset so that we have write access.
-                dataset_copy = dataset.derive_dataset(annotations_dataset, tool_name)
-                dataset_copy.add_annotations(annotations)
-        print('writing {} annotations to dataset {}'.format(
-            len(annotations), annotations_dataset))
-
-
 def main():
     """
     Parses the command line and dispatches subcommand.
@@ -110,7 +88,9 @@ def main():
                         help='MProv password (will be prompted if missing)')
 
     parser.add_argument('dataset_name',
-                        help='A dataset to which you have write access. If dataset does not exist a copy of an existing dataset is created.')
+                        help="""A dataset to which you have write access.
+                        If a dataset with this name does not exist a copy
+                        of Study 005 is created and used.""")
 
     args = parser.parse_args()
     dataset_name = args.dataset_name
@@ -131,7 +111,14 @@ def main():
         dataset = open_or_create_dataset(session, dataset_name, tool_name)
         layer_name = tool_name + ' layer'
         annotations = create_annotatations(dataset, layer_name, tool_name)
-        annotate_dataset(dataset, annotations, tool_name)
+        dataset.add_annotations(annotations)
+        print("wrote {} annotations to layer '{}' in dataset '{}'".format(
+            len(annotations),
+            layer_name,
+            dataset.name))
+        if args.mprov_user:
+            print("wrote provenance of annotations to graph '{}'".format(
+                MProvConnection.graph_name))
         session.close_dataset(dataset)
 
 
