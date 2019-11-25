@@ -66,7 +66,7 @@ class IeegApi:
         response = self.http.get(url, headers=IeegApi._accept_json)
         # Check response
         if response.status_code != 200:
-            raise IeegServiceError(response.status_code, response.json())
+            raise IeegServiceError.from_json(response.status_code, response.json())
         return response
 
     def get_time_series_details(self, dataset_id):
@@ -251,19 +251,39 @@ class IeegApi:
         response = self.http.post(url_str, headers=IeegApi._accept_json)
         return response
 
+
 class IeegConnectionError(Exception):
     """
     A simple exception for connectivity errors
     """
+
 
 class IeegServiceError(IeegConnectionError):
     """
     An error resopnse was recieved from the server.
     """
 
-    def __init__(self, status_code, ieegWsExceptionBody):
-        self.status_code = status_code
-        body = ieegWsExceptionBody['IeegWsException']
-        self.error_code = body['errorCode']
-        message = body['message']
+    def __init__(self, http_status_code, ieeg_error_code, message):
+        self.http_status_code = http_status_code
+        self.ieeg_error_code = ieeg_error_code
         super(IeegServiceError, self).__init__(message)
+
+    @staticmethod
+    def from_json(http_status, json_ieeg_ws_exception_body):
+        """
+        Returns IeegServiceError from the given json content
+        """
+        content = json_ieeg_ws_exception_body['IeegWsException']
+        ieeg_error_code = content['errorCode']
+        message = content['message']
+        return IeegServiceError(http_status, ieeg_error_code, message)
+
+    @staticmethod
+    def from_xml(http_status, xml_ieeg_ws_exception_body):
+        """
+        Returns IeegServiceError from the given xml content
+        """
+        content = ET.fromstring(xml_ieeg_ws_exception_body)
+        ieeg_error_code = content.find('errorCode').text
+        message = content.find('message').text
+        return IeegServiceError(http_status, ieeg_error_code, message)
