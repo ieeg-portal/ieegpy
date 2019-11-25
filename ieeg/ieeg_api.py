@@ -65,7 +65,7 @@ class IeegApi:
 
         response = self.http.get(url, headers=IeegApi._accept_json)
         # Check response
-        if response.status_code != 200:
+        if response.status_code != requests.codes.ok:
             raise IeegServiceError.from_json(response.status_code, response.json())
         return response
 
@@ -75,6 +75,8 @@ class IeegApi:
         """
         url = self.base_url + IeegApi._get_time_series_details_path + dataset_id
         response = self.http.get(url, headers=IeegApi._accept_xml)
+        if response.status_code != requests.codes.ok:
+            raise IeegServiceError.from_xml(response.status_code, response.text)
         return response
 
     def get_annotation_layers(self, dataset):

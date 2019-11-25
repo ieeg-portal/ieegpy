@@ -17,9 +17,8 @@
 
 import xml.etree.ElementTree as ET
 from deprecation import deprecated
-import requests
 from ieeg.dataset import Dataset as DS
-from ieeg.ieeg_api import IeegApi, IeegConnectionError
+from ieeg.ieeg_api import IeegApi
 
 class Session:
     """
@@ -87,10 +86,6 @@ class Session:
         time_series_details_response = self.api.get_time_series_details(
             snapshot_id)
 
-        if time_series_details_response.status_code != 200:
-            print(time_series_details_response.text)
-            raise IeegConnectionError('Authorization failed or cannot get time series details for ' +
-                                      name)
         json_montages = self._get_montages(snapshot_id)
         dataset = DS(name, ET.fromstring(
             time_series_details_response.text), snapshot_id, self, json_montages=json_montages)
