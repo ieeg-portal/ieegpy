@@ -67,10 +67,6 @@ class Session:
         Returns the montages associated with this Dataset.
         """
         response = self.api.get_montages(dataset_id)
-        if response.status_code != requests.codes.ok:
-            print(response.text)
-            raise IeegConnectionError(
-                'Could not get montages')
         response_body = response.json()
         # If there is just one montage, response will be a single
         # montage and not an array.

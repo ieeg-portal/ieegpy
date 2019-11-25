@@ -174,6 +174,8 @@ class IeegApi:
         url_str = self.base_url + IeegApi._get_montages_path % dataset_id
 
         response = self.http.get(url_str, headers=IeegApi._accept_json)
+        if response.status_code != requests.codes.ok:
+            raise IeegServiceError.from_json(response.status_code, response.json())
         return response
 
     def add_annotations(self, dataset, annotations):
