@@ -18,8 +18,8 @@
 import xml.etree.ElementTree as ET
 from deprecation import deprecated
 import requests
-from ieeg.dataset import Dataset as DS, IeegConnectionError
-from ieeg.ieeg_api import IeegApi
+from ieeg.dataset import Dataset as DS
+from ieeg.ieeg_api import IeegApi, IeegConnectionError
 
 class Session:
     """
@@ -85,12 +85,6 @@ class Session:
         """
 
         get_id_response = self.api.get_dataset_id_by_name(name)
-
-        # Check response
-        if get_id_response.status_code != 200:
-            print(get_id_response.text)
-            raise IeegConnectionError(
-                'Authorization failed or cannot find study ' + name)
 
         snapshot_id = get_id_response.text
 

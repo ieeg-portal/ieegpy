@@ -63,7 +63,10 @@ class IeegApi:
         """
         url = self.base_url + IeegApi._get_id_by_dataset_name_path + dataset_name
 
-        response = self.http.get(url)
+        response = self.http.get(url, headers=IeegApi._accept_json)
+        # Check response
+        if response.status_code != 200:
+            raise IeegServiceError(response.status_code, response.json())
         return response
 
     def get_time_series_details(self, dataset_id):
@@ -247,3 +250,20 @@ class IeegApi:
 
         response = self.http.post(url_str, headers=IeegApi._accept_json)
         return response
+
+class IeegConnectionError(Exception):
+    """
+    A simple exception for connectivity errors
+    """
+
+class IeegServiceError(IeegConnectionError):
+    """
+    An error resopnse was recieved from the server.
+    """
+
+    def __init__(self, status_code, ieegWsExceptionBody):
+        self.status_code = status_code
+        body = ieegWsExceptionBody['IeegWsException']
+        self.error_code = body['errorCode']
+        message = body['message']
+        super(IeegServiceError, self).__init__(message)

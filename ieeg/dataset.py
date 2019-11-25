@@ -18,6 +18,7 @@ import requests
 import numpy as np
 import pandas as pd
 from deprecation import deprecated
+from ieeg.ieeg_api import IeegConnectionError
 
 
 class TimeSeriesDetails:
@@ -608,15 +609,3 @@ class Dataset:
     @deprecated
     def getData(self, start, duration, channels):
         return self.get_data(start, duration, channels)
-
-
-class IeegConnectionError(Exception):
-    """
-    A simple exception for connectivity errors
-    """
-
-    def __init__(self, value):
-        self.value = value
-
-    def __str__(self):
-        return repr(self.value)
