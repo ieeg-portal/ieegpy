@@ -33,16 +33,20 @@ class IeegApi:
     _add_annotations_path = '/timeseries/addAnnotationsToDataSnapshot/'
     _delete_annotation_layer_path = '/timeseries/removeTsAnnotationsByLayer/'
 
-    _send_json = {'Content-Type': 'application/json'}
-    _send_xml = {'Content-Type': 'application/xml'}
-    _accept_json = {'Accept': 'application/json'}
-    _accept_xml = {'Accept': 'application/xml'}
+    _json_content = 'application/json'
+    _xml_content = 'application/xml'
+    _send_json = {'Content-Type': _json_content}
+    _send_xml = {'Content-Type': _xml_content}
+    _accept_json = {'Accept': _json_content}
+    _accept_xml = {'Accept': _xml_content}
     _send_accept_json = {
-        'Content-Type': 'application/json', 'Accept': 'application/json'}
+        'Content-Type': _json_content, 'Accept': _json_content}
 
     def __init__(self, username, password,
                  use_https=True, host='www.ieeg.org', port=None, verify_ssl=True):
         self.http = requests.Session()
+        self.http.hooks['response'].append(
+            IeegApi.raise_ieeg_exception)
         self.http.auth = IeegAuth(username, password)
         self.http.verify = verify_ssl
         self.scheme = 'https' if use_https else 'http'
@@ -50,6 +54,25 @@ class IeegApi:
         self.port = port
         authority = host + ':' + str(port) if port else host
         self.base_url = self.scheme + '://' + authority + '/services'
+
+    @staticmethod
+    def raise_ieeg_exception(response, *args, **kwargs):
+        """
+        Raises error if http status code is not 200
+        """
+        #pylint: disable=unused-argument
+        if response.status_code != requests.codes.ok:
+            content_type = response.headers.get('Content-Type')
+
+            if content_type == IeegApi._json_content:
+                raise IeegServiceError.from_json(
+                    response.status_code, response.json())
+
+            if content_type == IeegApi._xml_content:
+                raise IeegServiceError.from_xml(
+                    response.status_code, response.text)
+
+            raise IeegConnectionError(response.text)
 
     def close(self):
         """
@@ -64,9 +87,6 @@ class IeegApi:
         url = self.base_url + IeegApi._get_id_by_dataset_name_path + dataset_name
 
         response = self.http.get(url, headers=IeegApi._accept_json)
-        # Check response
-        if response.status_code != requests.codes.ok:
-            raise IeegServiceError.from_json(response.status_code, response.json())
         return response
 
     def get_time_series_details(self, dataset_id):
@@ -75,8 +95,6 @@ class IeegApi:
         """
         url = self.base_url + IeegApi._get_time_series_details_path + dataset_id
         response = self.http.get(url, headers=IeegApi._accept_xml)
-        if response.status_code != requests.codes.ok:
-            raise IeegServiceError.from_xml(response.status_code, response.text)
         return response
 
     def get_annotation_layers(self, dataset):
@@ -176,8 +194,6 @@ class IeegApi:
         url_str = self.base_url + IeegApi._get_montages_path % dataset_id
 
         response = self.http.get(url_str, headers=IeegApi._accept_json)
-        if response.status_code != requests.codes.ok:
-            raise IeegServiceError.from_json(response.status_code, response.json())
         return response
 
     def add_annotations(self, dataset, annotations):
@@ -222,7 +238,7 @@ class IeegApi:
         url_str = self.base_url + IeegApi._add_annotations_path + dataset.snap_id
         response = self.http.post(url_str,
                                   json=request_body,
-                                  headers=IeegApi._send_json)
+                                  headers=IeegApi._send_accept_json)
         return response
 
     def move_annotation_layer(self, dataset, from_layer, to_layer):

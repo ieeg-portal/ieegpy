@@ -14,7 +14,6 @@
 # limitations under the License.
 ##################################################################################
 from collections import namedtuple
-import requests
 import numpy as np
 import pandas as pd
 from deprecation import deprecated
@@ -341,13 +340,8 @@ class Dataset:
         :param tool_name: The name of the tool creating the dataset
         :return: A new Dataset which is a copy of this dataset and which has the given name.
         """
-        response = self.session.api.derive_dataset(self,
-                                                   derived_dataset_name, tool_name)
-        if response.status_code != 200:
-            print(response.text)
-            raise IeegConnectionError(
-                'Cannot create derived Dataset ' + derived_dataset_name)
-
+        self.session.api.derive_dataset(self,
+                                        derived_dataset_name, tool_name)
         return self.session.open_dataset(derived_dataset_name)
 
     def get_channel_labels(self):
@@ -482,11 +476,6 @@ class Dataset:
 
         # response to request
         response = self.session.api.get_annotation_layers(self)
-        if response.status_code != requests.codes.ok:
-            print(response.text)
-            raise IeegConnectionError(
-                'Could not get annotation layers for dataset')
-
         response_body = response.json()
         counts_by_layer = response_body['countsByLayer']['countsByLayer']
         if not counts_by_layer:
@@ -521,10 +510,6 @@ class Dataset:
                                                     start_offset_usecs=start_offset_usecs,
                                                     first_result=first_result,
                                                     max_results=max_results)
-        if response.status_code != requests.codes.ok:
-            print(response.text)
-            raise IeegConnectionError(
-                'Could not get annotation layer ' + layer_name)
         response_body = response.json()
         timeseries_annotations = response_body['timeseriesannotations']
         json_annotations = timeseries_annotations['annotations']['annotation']
@@ -560,12 +545,7 @@ class Dataset:
         """
         Adds a collection of Annotations to this dataset.
         """
-        response = self.session.api.add_annotations(self, annotations)
-        if response.status_code != requests.codes.ok:
-            response_body = response.text
-            print(response_body)
-            raise IeegConnectionError(
-                'Could not add annotations')
+        self.session.api.add_annotations(self, annotations)
         if self.session.mprov_listener:
             self.session.mprov_listener.on_add_annotations(annotations)
 
@@ -577,11 +557,6 @@ class Dataset:
         """
         response = self.session.api.move_annotation_layer(
             self, from_layer, to_layer)
-        if response.status_code != requests.codes.ok:
-            response_body = response.text
-            print(response_body)
-            raise IeegConnectionError(
-                'Could not move annotation layer ' + from_layer + ' to ' + to_layer)
         response_body = response.json()
         moved = response_body['tsAnnotationsMoved']['moved']
         return int(moved)
@@ -593,11 +568,6 @@ class Dataset:
         :returns: the number of deleted annotations.
         """
         response = self.session.api.delete_annotation_layer(self, layer)
-        if response.status_code != requests.codes.ok:
-            response_body = response.text
-            print(response_body)
-            raise IeegConnectionError(
-                'Could not delete annotation layer ' + layer)
         response_body = response.json()
         deleted = response_body['tsAnnotationsDeleted']['noDeleted']
         return int(deleted)
