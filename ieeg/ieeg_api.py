@@ -293,7 +293,9 @@ class IeegServiceError(IeegConnectionError):
         """
         Returns IeegServiceError from the given json content
         """
-        content = json_ieeg_ws_exception_body['IeegWsException']
+        content = json_ieeg_ws_exception_body.get('IeegWsException')
+        if not content:
+            return IeegConnectionError(json_ieeg_ws_exception_body)
         ieeg_error_code = content['errorCode']
         message = content['message']
         return IeegServiceError(http_status, ieeg_error_code, message)
@@ -304,6 +306,9 @@ class IeegServiceError(IeegConnectionError):
         Returns IeegServiceError from the given xml content
         """
         content = ET.fromstring(xml_ieeg_ws_exception_body)
-        ieeg_error_code = content.find('errorCode').text
+        ieeg_error_code_element = content.find('errorCode')
+        if not ieeg_error_code_element:
+            return IeegConnectionError(xml_ieeg_ws_exception_body)
+        ieeg_error_code = ieeg_error_code_element.text
         message = content.find('message').text
         return IeegServiceError(http_status, ieeg_error_code, message)
