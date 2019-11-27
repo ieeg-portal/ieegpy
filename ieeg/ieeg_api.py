@@ -60,6 +60,7 @@ class IeegApi:
         """
         Raises error if http status code is not 200
         """
+        # Get a runtime error if the unused args are removed from sig.
         #pylint: disable=unused-argument
         if response.status_code != requests.codes.ok:
             content_type = response.headers.get('Content-Type')
