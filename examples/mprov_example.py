@@ -19,7 +19,8 @@ import random
 from pennprov.connection.mprov_connection import MProvConnection
 from ieeg.auth import Session
 from ieeg.mprov_listener import MProvListener
-from ieeg.dataset import Annotation, IeegConnectionError
+from ieeg.dataset import Annotation
+from ieeg.ieeg_api import IeegServiceError
 
 
 def open_or_create_dataset(session, dataset_name, tool_name):
@@ -29,18 +30,15 @@ def open_or_create_dataset(session, dataset_name, tool_name):
     """
     try:
         dataset = session.open_dataset(dataset_name)
-    except IeegConnectionError as error:
-        # Not a foolproof check of non-existence vs something else,
-        # but best we can do at the moment.
-        if not error.value.startswith('Authorization'):
-            raise error
-        else:
-            base_dataset = 'Study 005'
-            dataset = session.open_dataset(base_dataset)
-            # Copy dataset so that we have write access.
-            dataset = dataset.derive_dataset(dataset_name, tool_name)
-            print('Dataset {} does not exist. Created copy of {}'.format(
-                dataset_name, base_dataset))
+    except IeegServiceError as error:
+        if not error.ieeg_error_code == 'NoSuchDataSnapshot':
+            raise
+        base_dataset = 'Study 005'
+        dataset = session.open_dataset(base_dataset)
+        # Copy dataset so that we have write access.
+        dataset = dataset.derive_dataset(dataset_name, tool_name)
+        print('Dataset {} does not exist. Created copy of {}'.format(
+            dataset_name, base_dataset))
     return dataset
 
 
