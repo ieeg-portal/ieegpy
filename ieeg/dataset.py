@@ -273,16 +273,16 @@ class Dataset:
     """
     Class representing Dataset on the platform
     """
-    snap_id = ""
-    ts_details = {}  # Time series details by label
-    ts_details_by_id = {}  # Time series details by portal_id
-    ch_labels = []  # Channel Labels
-    ts_array = []   # Channel
 
     _SERVER_GAP_VALUE = np.iinfo(np.int32).min
 
     def __init__(self, dataset_name, ts_details, snapshot_id, parent, json_montages=None):
         # type: (str, xml.etree.Element, str, ieeg.auth.Session) -> None
+        self.snap_id = ""
+        self.ts_details = {}  # Time series details by label
+        self.ts_details_by_id = {}  # Time series details by portal_id
+        self.ch_labels = []  # Channel Labels
+        self.ts_array = []   # Channel
         self.name = dataset_name
         self.session = parent
         self.snap_id = snapshot_id

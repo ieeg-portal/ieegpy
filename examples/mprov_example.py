@@ -78,12 +78,12 @@ def open_or_create_dataset(session, dataset_name, tool_name):
     except IeegServiceError as error:
         if not error.ieeg_error_code == 'NoSuchDataSnapshot':
             raise
-        base_dataset = 'Study 005'
-        dataset = session.open_dataset(base_dataset)
+        base_dataset_name = 'Study 005'
+        base_dataset = session.open_dataset(base_dataset_name)
         # Copy dataset so that we have write access.
-        dataset = dataset.derive_dataset(dataset_name, tool_name)
+        dataset = base_dataset.derive_dataset(dataset_name, tool_name)
         print('Dataset {} does not exist. Created copy of {}'.format(
-            dataset_name, base_dataset))
+            dataset_name, base_dataset_name))
     return dataset
 
 
@@ -120,7 +120,7 @@ def main():
         MProvConnection.graph_name = dataset_name
         mprov_connection = MProvConnection(
             args.mprov_user, args.mprov_password, mprov_url)
-        mprov_listener = MProvListener(mprov_connection)
+        mprov_listener = None # MProvListener(mprov_connection)
     with Session(args.user, args.password, mprov_listener=mprov_listener) as session:
         tool_name = parser.prog
         dataset = open_or_create_dataset(session, dataset_name, tool_name)
