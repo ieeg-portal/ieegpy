@@ -16,56 +16,35 @@
 import argparse
 import getpass
 import datetime
+import math as m
 import numpy as np
 
 from pennprov.connection.mprov_connection import MProvConnection
 from ieeg.auth import Session
-from ieeg.mprov_listener import MProvListener
 from ieeg.dataset import Annotation
 from ieeg.ieeg_api import IeegServiceError
-from ieeg.processing import ProcessSlidingWindowAcrossChannels
+from ieeg.annotation_processing import SlidingWindowAnnotator
 
 
-class NegativeMeanAnnotator:
+def negative_mean_annotator(data_block, annotation_context):
     """
-    Silly annotator to work with ProcessSlidingWindowAcrossChannels.execute_with_provenance()
-    to annotate windows with negative means.
-    Provides context to the computation over the window.
+    Adds annotation if the mean of data_block is negative.
     """
-
-    def __init__(self, dataset, channel_labels, layer_name,
-                 start_time_usec, window_size_usec, slide_usec):
-        self.annotations = []
-        self.dataset = dataset
-        self.channel_labels = channel_labels
-        self.layer_name = layer_name
-
-        self.current_block_index = 0
-        self.start_time_usec = start_time_usec
-        self.window_size_usec = window_size_usec
-        self.slide_usec = slide_usec
-        self.annotator_name = __class__.__name__
-
-    def process_data_block(self, data_block):
-        """
-        Adds annotation to self.annotations if the mean of data_block is negative.
-        """
-        mean = np.mean(data_block)
-        if mean < 0:
-            annotation_string = 'mean: ' + str(mean)
-            start_offset_usec = (self.start_time_usec +
-                                 self.current_block_index * self.slide_usec)
-            end_offset_usec = start_offset_usec + self.window_size_usec
-            annotation = Annotation(self.dataset,
-                                    self.annotator_name,
-                                    annotation_string,
-                                    annotation_string,
-                                    self.layer_name,
-                                    start_offset_usec,
-                                    end_offset_usec,
-                                    annotated_labels=self.channel_labels)
-            self.annotations.append(annotation)
-        self.current_block_index += 1
+    mean = np.mean(data_block)
+    if mean >= 0 or m.isnan(mean):
+        return []
+    annotation_string = 'mean: ' + str(mean)
+    start_offset_usec = annotation_context.window_start_usec
+    end_offset_usec = start_offset_usec + annotation_context.window_size_usec
+    annotation = Annotation(annotation_context.dataset,
+                            'negative_mean_annotator',
+                            annotation_string,
+                            annotation_string,
+                            annotation_context.annotation_layer,
+                            start_offset_usec,
+                            end_offset_usec,
+                            annotated_labels=annotation_context.input_channel_labels)
+    return [annotation]
 
 
 def open_or_create_dataset(session, dataset_name, tool_name):
@@ -111,21 +90,18 @@ def main():
 
     if not args.password:
         args.password = getpass.getpass('IEEG Password: ')
-    if args.mprov_user and not args.mprov_password:
-        args.mprov_password = getpass.getpass('MProv Password: ')
     mprov_connection = None
-    mprov_listener = None
     if args.mprov_user:
+        mprov_password = args.mprov_password if args.mprov_password else getpass.getpass(
+            'MProv Password: ')
         mprov_url = 'http://localhost:8088'
         MProvConnection.graph_name = dataset_name
         mprov_connection = MProvConnection(
-            args.mprov_user, args.mprov_password, mprov_url)
-        mprov_listener = None # MProvListener(mprov_connection)
-    with Session(args.user, args.password, mprov_listener=mprov_listener) as session:
+            args.mprov_user, mprov_password, mprov_url)
+    with Session(args.user, args.password) as session:
         tool_name = parser.prog
         dataset = open_or_create_dataset(session, dataset_name, tool_name)
         layer_name = 'negative mean layer ' + datetime.datetime.today().isoformat()
-        labels = dataset.get_channel_labels()
         dataset_duration_usec = dataset.end_time - dataset.start_time
         # Probably working with a copy of Study 005.
         # It has a gap at the beginning, so we'll try to skip it.
@@ -135,23 +111,15 @@ def main():
         window_size_usec = 1000000
         slide_usec = 500000
         duration_usec = 60000000
-        annotator = NegativeMeanAnnotator(
-            dataset, labels, layer_name, start_time_usec, window_size_usec, slide_usec)
-        ProcessSlidingWindowAcrossChannels.execute_with_provenance(
-            annotator.dataset,
-            annotator.channel_labels,
-            annotator.start_time_usec,
-            annotator.window_size_usec,
-            annotator.slide_usec,
-            duration_usec,
-            annotator.process_data_block,
-            mprov_connection,
-            annotator.annotator_name,
-            annotator.dataset.name)
-        dataset.add_annotations(annotator.annotations)
+        sliding_window_annotator = SlidingWindowAnnotator(
+            window_size_usec, slide_usec, negative_mean_annotator,
+            mprov_connection=mprov_connection)
+        annotations = sliding_window_annotator.annotate_dataset(dataset, layer_name,
+                                                                start_time_usec=start_time_usec,
+                                                                duration_usec=duration_usec)
         print("wrote {} annotations to layer '{}' in dataset '{}'".format(
-            len(annotator.annotations),
-            annotator.layer_name,
+            len(annotations),
+            layer_name,
             dataset.name))
         if args.mprov_user:
             print("wrote provenance of annotations to graph '{}'".format(
