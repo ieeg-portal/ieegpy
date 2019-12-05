@@ -17,6 +17,24 @@ import math
 import numpy as np
 from pennprov.metadata.stream_metadata import BasicTuple, BasicSchema
 
+class Window:
+    """
+    A processing window
+    """
+
+    def __init__(self,
+                 dataset,
+                 input_channel_labels,
+                 data_block,
+                 window_index,
+                 window_start_usec,
+                 window_size_usec):
+        self.dataset = dataset
+        self.input_channel_labels = input_channel_labels
+        self.data_block = data_block
+        self.window_index = window_index
+        self.window_start_usec = window_start_usec
+        self.window_size_usec = window_size_usec
 
 class ProcessSlidingWindowPerChannel:
     """

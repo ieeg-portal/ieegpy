@@ -14,24 +14,10 @@
  limitations under the License.
 '''
 import math as m
+import datetime
 
-
-class AnnotatorContext:
-    """
-    Provides context to an annotator function.
-    """
-
-    def __init__(self,
-                 dataset,
-                 input_channel_labels,
-                 annotation_layer,
-                 window_start_usec,
-                 window_size_usec):
-        self.dataset = dataset
-        self.input_channel_labels = input_channel_labels
-        self.annotation_layer = annotation_layer
-        self.window_start_usec = window_start_usec
-        self.window_size_usec = window_size_usec
+from ieeg.mprov_listener import MProvWriter, AnnotationActivity
+from ieeg.processing import Window
 
 
 class SlidingWindowAnnotator:
@@ -44,7 +30,8 @@ class SlidingWindowAnnotator:
         self.window_size_usec = window_size_usec
         self.slide_usec = slide_usec
         self.annotator_function = annotator_function
-        self.mprov_connection = mprov_connection
+        if mprov_connection:
+            self.mprov_writer = MProvWriter(mprov_connection)
 
     def annotate_dataset(self,
                          dataset,
@@ -61,34 +48,31 @@ class SlidingWindowAnnotator:
 
         input_channel_indices = dataset.get_channel_indices(
             input_channel_labels)
-        if self.mprov_connection:
-            self._write_input_channel_entities(input_channel_labels)
+        if self.mprov_writer:
+            self.mprov_writer.write_input_channel_entities(
+                dataset, input_channel_labels)
 
         annotations = []
 
-        for window in range(0, int(m.ceil(duration_usec / self.slide_usec))):
-            window_start_usec = start_time_usec + window * self.slide_usec
-            annotation_context = AnnotatorContext(
-                dataset,
-                input_channel_labels,
-                annotation_layer,
-                window_start_usec,
-                self.window_size_usec)
+        for window_index in range(0, int(m.ceil(duration_usec / self.slide_usec))):
+            window_start_usec = start_time_usec + window_index * self.slide_usec
             data_block = dataset.get_data(window_start_usec,
                                           self.window_size_usec,
                                           input_channel_indices)
+            window = Window(dataset, input_channel_labels, data_block,
+                            window_index, window_start_usec, self.window_size_usec)
+            activity_start_time = datetime.datetime.now(datetime.timezone.utc)
             new_annotations = self.annotator_function(
-                data_block, annotation_context)
+                window, annotation_layer)
+            activity_end_time = datetime.datetime.now(datetime.timezone.utc)
 
             annotations.extend(new_annotations)
-            if self.mprov_connection:
-                self._write_widow_prov()
+            if self.mprov_writer:
+                activity = AnnotationActivity(
+                    self.annotator_function.__name__, annotation_layer, window_index,
+                    activity_start_time, activity_end_time)
+                self.mprov_writer.write_widow_prov(
+                    window, activity, new_annotations)
 
         dataset.add_annotations(annotations)
         return annotations
-
-    def _write_widow_prov(self):
-        pass
-
-    def _write_input_channel_entities(self, input_channel_labels):
-        pass

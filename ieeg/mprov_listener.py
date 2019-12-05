@@ -18,6 +18,211 @@ from pennprov.connection.mprov_connection import MProvConnection
 import pennprov.models
 
 
+class AnnotationActivity:
+
+    def __init__(self, annotator_name, annotation_layer, activity_index,
+                 start_time_utc, end_time_utc):
+        self.annotator_name = annotator_name
+        self.annotation_layer = annotation_layer
+        self.activity_index = activity_index
+        self.start_time_utc = start_time_utc
+        self.end_time_utc = end_time_utc
+        self.name = '{0}.{1}'.format(self.annotator_name, self.activity_index)
+
+    def get_token(self):
+        return pennprov.QualifiedName(
+            MProvListener.activity_namespace, self.name)
+
+    def get_node(self):
+        attributes = [pennprov.models.Attribute(
+            name=MProvListener.activity_attr_name, value=self.name, type='STRING')]
+        activity = pennprov.NodeModel(
+            type='ACTIVITY', attributes=attributes,
+            start_time=self.start_time_utc, end_time=self.end_time_utc)
+        return activity
+
+
+class MProvWriter:
+    """
+    Writes provenance to the MProv system.
+    """
+
+    def __init__(self, mprov_connection):
+        self.mprov_connection = mprov_connection
+        self.dataset_name_to_token = {}
+        self.timeseries_id_to_token = {}
+        self.window_name_to_token = {}
+        self.activity_name_to_token = {}
+
+    def write_input_channel_entities(self, dataset, input_channel_labels):
+        """
+        Ensures Entities exist for the input channels and the containing dataset.
+        """
+        dataset_name = dataset.name
+        token = self.dataset_name_to_token.get(dataset_name)
+        if not token:
+            token = self._ensure_dataset_entity(
+                dataset, input_channel_labels)
+            self.dataset_name_to_token[dataset_name] = token
+
+    def _ensure_dataset_entity(self, dataset, input_channel_labels):
+        """
+        Stores a Collection for the given dataset to the ProvDm store if necessary.
+        """
+        mprov = self.mprov_connection
+        graph = mprov.get_graph()
+        prov_api = mprov.get_low_level_api()
+        dataset_name = dataset.name
+        dataset_token = pennprov.QualifiedName(
+            MProvListener.dataset_namespace, dataset_name)
+        try:
+            prov_api.get_provenance_data(
+                resource=graph, token=dataset_token)
+        except pennprov.rest.ApiException as api_error:
+            if api_error.status != 404:
+                raise api_error
+            attributes = [pennprov.models.Attribute(
+                name=MProvListener.dataset_attr_name, value=dataset_name, type='STRING')]
+            entity = pennprov.NodeModel(
+                type='COLLECTION', attributes=attributes)
+            mprov.prov_dm_api.store_node(resource=graph,
+                                         token=dataset_token, body=entity)
+            for input_channel_label in input_channel_labels:
+                tsd = dataset.get_time_series_details(input_channel_label)
+                ts_token = self.timeseries_id_to_token.get(tsd.portal_id)
+                if not ts_token:
+                    ts_token = self._ensure_timeseries_entity(tsd)
+                    self.timeseries_id_to_token[tsd.portal_id] = ts_token
+                membership = pennprov.RelationModel(
+                    type='MEMBERSHIP', subject_id=dataset_token, object_id=ts_token, attributes=[])
+                mprov.prov_dm_api.store_relation(
+                    resource=graph, body=membership, label='hadMember')
+        return dataset_token
+
+    def _ensure_timeseries_entity(self, ts_details):
+        """
+        Stores an Entity for the given TimeSeriesDetails instance.
+        """
+        mprov = self.mprov_connection
+        graph = mprov.get_graph()
+        prov_api = mprov.get_low_level_api()
+        token = token = pennprov.QualifiedName(
+            MProvListener.timeseries_namespace, ts_details.portal_id)
+        try:
+            prov_api.get_provenance_data(
+                resource=graph, token=token)
+        except pennprov.rest.ApiException as api_error:
+            if api_error.status != 404:
+                raise api_error
+            attributes = [pennprov.models.Attribute(
+                name=MProvListener.timeseries_attr_name,
+                value=ts_details.channel_label,
+                type='STRING')]
+            entity = pennprov.NodeModel(
+                type='ENTITY', attributes=attributes)
+            mprov.prov_dm_api.store_node(resource=graph,
+                                         token=token, body=entity)
+        return token
+
+    def _get_window_name(self, window, activity):
+        return '{0}.w.{1}'.format(activity.annotator_name, window.window_index)
+
+    def write_widow_prov(self, window, activity, annotations):
+        mprov = self.mprov_connection
+        graph = mprov.get_graph()
+        window_name = self._get_window_name(window, activity)
+        window_token = pennprov.QualifiedName(MProvListener.window_namespace,
+                                              window_name)
+        window_attributes = [
+            pennprov.models.Attribute(
+                name=MProvListener.window_start_time_name,
+                value=window.window_start_usec, type='LONG'),
+            pennprov.models.Attribute(
+                name=MProvListener.window_end_time_name,
+                value=(window.window_start_usec + window.window_size_usec), type='LONG')
+        ]
+        window_entity = pennprov.NodeModel(
+            type='COLLECTION', attributes=window_attributes)
+        mprov.prov_dm_api.store_node(resource=graph,
+                                     token=window_token, body=window_entity)
+        for input_channel_label in window.input_channel_labels:
+            tsd = window.dataset.get_time_series_details(input_channel_label)
+            ts_token = self.timeseries_id_to_token.get(tsd.portal_id)
+            if not ts_token:
+                ts_token = self._ensure_timeseries_entity(tsd)
+                self.timeseries_id_to_token[tsd.portal_id] = ts_token
+            membership = pennprov.RelationModel(
+                type='MEMBERSHIP', subject_id=window_token, object_id=ts_token, attributes=[])
+            mprov.prov_dm_api.store_relation(
+                resource=graph, body=membership, label='hadMember')
+
+        self._store_activity(window_token, activity)
+        for annotation_index, annotation in enumerate(annotations):
+            self._store_annotation(activity, annotation_index, annotation)
+
+    def _store_activity(self, window_token, activity):
+        """
+        Stores an Activity if necessary
+        """
+        mprov = self.mprov_connection
+        graph = mprov.get_graph()
+        activity_token = activity.get_token()
+        activity_node = activity.get_node()
+        mprov.prov_dm_api.store_node(resource=graph,
+                                     token=activity_token, body=activity_node)
+        usage = pennprov.RelationModel(
+            type='USAGE', subject_id=activity_token, object_id=window_token, attributes=[])
+        mprov.prov_dm_api.store_relation(
+            resource=graph, body=usage, label='used'
+        )
+        return activity_token
+
+    def _store_annotation(self, activity, annotation_index, annotation):
+        """
+        Stores the given annotation in the ProvDm store.
+        """
+        mprov = self.mprov_connection
+        graph = mprov.get_graph()
+        annotation_id = '{0}.ann.{1}'.format(activity.name, annotation_index)
+
+        ann_token = pennprov.QualifiedName(MProvListener.annotation_namespace,
+                                           annotation_id)
+
+        attributes = self._get_annotation_attributes(annotation)
+        ann_entity = pennprov.NodeModel(type='ENTITY', attributes=attributes)
+        mprov.prov_dm_api.store_node(resource=graph,
+                                     token=ann_token, body=ann_entity)
+
+        activity_token = activity.get_token()
+        generation = pennprov.RelationModel(
+            type='GENERATION', subject_id=ann_token, object_id=activity_token, attributes=[])
+        mprov.prov_dm_api.store_relation(
+            resource=graph, body=generation, label='wasGeneratedBy'
+        )
+
+        return ann_token
+
+    def _get_annotation_attributes(self, annotation):
+        """
+        Returns list of pennprov Attributes for the given annotation.
+        """
+        attributes = [
+            pennprov.models.Attribute(
+                name=MProvListener.annotator_name, value=annotation.annotator, type='STRING'),
+            pennprov.models.Attribute(
+                name=MProvListener.type_name, value=annotation.type, type='STRING'),
+            pennprov.models.Attribute(
+                name=MProvListener.description_name, value=annotation.description, type='STRING'),
+            pennprov.models.Attribute(
+                name=MProvListener.layer_name, value=annotation.layer, type='STRING'),
+            pennprov.models.Attribute(
+                name=MProvListener.start_time_name, value=annotation.start_time_offset_usec, type='LONG'),
+            pennprov.models.Attribute(
+                name=MProvListener.end_time_name, value=annotation.end_time_offset_usec, type='LONG')
+        ]
+        return attributes
+
+
 class MProvListener:
     """
     A hook into the MProv system. If an instance is passed to ieeg.Session() through
@@ -51,6 +256,12 @@ class MProvListener:
     activity_namespace = MProvConnection.namespace + '/activity#'
     activity_attr_name = pennprov.QualifiedName(
         namespace=activity_namespace, local_part='name')
+
+    window_namespace = MProvConnection.namespace + '/window#'
+    window_start_time_name = pennprov.QualifiedName(
+        namespace=window_namespace, local_part='start_time_offset_usec')
+    window_end_time_name = pennprov.QualifiedName(
+        namespace=window_namespace, local_part='end_time_offset_usec')
 
     def __init__(self, mprov_connection):
         self.mprov_connection = mprov_connection

@@ -26,24 +26,24 @@ from ieeg.ieeg_api import IeegServiceError
 from ieeg.annotation_processing import SlidingWindowAnnotator
 
 
-def negative_mean_annotator(data_block, annotation_context):
+def negative_mean_annotator(window, annotation_layer):
     """
-    Adds annotation if the mean of data_block is negative.
+    Adds annotation if the mean of the samples is negative.
     """
-    mean = np.mean(data_block)
+    mean = np.mean(window.data_block)
     if mean >= 0 or m.isnan(mean):
         return []
     annotation_string = 'mean: ' + str(mean)
-    start_offset_usec = annotation_context.window_start_usec
-    end_offset_usec = start_offset_usec + annotation_context.window_size_usec
-    annotation = Annotation(annotation_context.dataset,
+    start_offset_usec = window.window_start_usec
+    end_offset_usec = start_offset_usec + window.window_size_usec
+    annotation = Annotation(window.dataset,
                             'negative_mean_annotator',
                             annotation_string,
                             annotation_string,
-                            annotation_context.annotation_layer,
+                            annotation_layer,
                             start_offset_usec,
                             end_offset_usec,
-                            annotated_labels=annotation_context.input_channel_labels)
+                            annotated_labels=window.input_channel_labels)
     return [annotation]
 
 
