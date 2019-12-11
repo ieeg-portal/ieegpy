@@ -14,11 +14,15 @@
  limitations under the License.
 '''
 import uuid
+import json
 from pennprov.connection.mprov_connection import MProvConnection
 import pennprov.models
 
 
 class AnnotationActivity:
+    """
+    Represents a PROVDM Activity for a run of an annotator function.
+    """
 
     def __init__(self, annotator_name, annotation_layer, activity_index,
                  start_time_utc, end_time_utc):
@@ -30,10 +34,16 @@ class AnnotationActivity:
         self.name = '{0}.{1}'.format(self.annotator_name, self.activity_index)
 
     def get_token(self):
+        """
+        Returns a pennprov.QualifiedName id for this Activity.
+        """
         return pennprov.QualifiedName(
             MProvListener.activity_namespace, self.name)
 
     def get_node(self):
+        """
+        Returns a pennprov.NodeModel for this Activity.
+        """
         attributes = [pennprov.models.Attribute(
             name=MProvListener.activity_attr_name, value=self.name, type='STRING')]
         activity = pennprov.NodeModel(
@@ -51,58 +61,58 @@ class MProvWriter:
         self.mprov_connection = mprov_connection
         self.dataset_name_to_token = {}
         self.timeseries_id_to_token = {}
-        self.window_name_to_token = {}
-        self.activity_name_to_token = {}
 
     def write_input_channel_entities(self, dataset, input_channel_labels):
         """
         Ensures Entities exist for the input channels and the containing dataset.
+
+        :param dataset: the ieeg.dataset.Dataset being processed.
+        :param input_channel_labels: a list of strings. The labels of the channels being processed.
         """
-        dataset_name = dataset.name
-        token = self.dataset_name_to_token.get(dataset_name)
-        if not token:
-            token = self._ensure_dataset_entity(
-                dataset, input_channel_labels)
-            self.dataset_name_to_token[dataset_name] = token
+        self._ensure_dataset_entity(dataset, input_channel_labels)
+        template = self._get_subgraph_template(len(input_channel_labels))
+        print(json.dumps(template))
 
     def _ensure_dataset_entity(self, dataset, input_channel_labels):
         """
         Stores a Collection for the given dataset to the ProvDm store if necessary.
         """
+        dataset_token = self.dataset_name_to_token.get(dataset.name)
+        if dataset_token:
+            return dataset_token
         mprov = self.mprov_connection
         graph = mprov.get_graph()
-        prov_api = mprov.get_low_level_api()
-        dataset_name = dataset.name
         dataset_token = pennprov.QualifiedName(
-            MProvListener.dataset_namespace, dataset_name)
+            MProvListener.dataset_namespace, dataset.name)
         try:
-            prov_api.get_provenance_data(
+            self.mprov_connection.get_low_level_api().get_provenance_data(
                 resource=graph, token=dataset_token)
         except pennprov.rest.ApiException as api_error:
             if api_error.status != 404:
                 raise api_error
             attributes = [pennprov.models.Attribute(
-                name=MProvListener.dataset_attr_name, value=dataset_name, type='STRING')]
+                name=MProvListener.dataset_attr_name, value=dataset.name, type='STRING')]
             entity = pennprov.NodeModel(
                 type='COLLECTION', attributes=attributes)
             mprov.prov_dm_api.store_node(resource=graph,
                                          token=dataset_token, body=entity)
             for input_channel_label in input_channel_labels:
                 tsd = dataset.get_time_series_details(input_channel_label)
-                ts_token = self.timeseries_id_to_token.get(tsd.portal_id)
-                if not ts_token:
-                    ts_token = self._ensure_timeseries_entity(tsd)
-                    self.timeseries_id_to_token[tsd.portal_id] = ts_token
+                ts_token = self._ensure_timeseries_entity(tsd)
                 membership = pennprov.RelationModel(
                     type='MEMBERSHIP', subject_id=dataset_token, object_id=ts_token, attributes=[])
                 mprov.prov_dm_api.store_relation(
                     resource=graph, body=membership, label='hadMember')
+        self.dataset_name_to_token[dataset.name] = dataset_token
         return dataset_token
 
     def _ensure_timeseries_entity(self, ts_details):
         """
         Stores an Entity for the given TimeSeriesDetails instance.
         """
+        ts_token = self.timeseries_id_to_token.get(ts_details.portal_id)
+        if ts_token:
+            return ts_token
         mprov = self.mprov_connection
         graph = mprov.get_graph()
         prov_api = mprov.get_low_level_api()
@@ -122,12 +132,20 @@ class MProvWriter:
                 type='ENTITY', attributes=attributes)
             mprov.prov_dm_api.store_node(resource=graph,
                                          token=token, body=entity)
+        self.timeseries_id_to_token[ts_details.portal_id] = token
         return token
 
     def _get_window_name(self, window, activity):
         return '{0}.w.{1}'.format(activity.annotator_name, window.window_index)
 
     def write_widow_prov(self, window, activity, annotations):
+        """
+        Writes the window, activity, and output to the prov store.
+        :param window: The ieeg.processing.Window
+        :param activity: The ieeg.annotation_processing.AnnotationActivity
+                         that used the window as input.
+        :param annotations: The list of ieeg.dataset.Annotations output by the activity.
+        """
         mprov = self.mprov_connection
         graph = mprov.get_graph()
         window_name = self._get_window_name(window, activity)
@@ -147,10 +165,7 @@ class MProvWriter:
                                      token=window_token, body=window_entity)
         for input_channel_label in window.input_channel_labels:
             tsd = window.dataset.get_time_series_details(input_channel_label)
-            ts_token = self.timeseries_id_to_token.get(tsd.portal_id)
-            if not ts_token:
-                ts_token = self._ensure_timeseries_entity(tsd)
-                self.timeseries_id_to_token[tsd.portal_id] = ts_token
+            ts_token = self._ensure_timeseries_entity(tsd)
             membership = pennprov.RelationModel(
                 type='MEMBERSHIP', subject_id=window_token, object_id=ts_token, attributes=[])
             mprov.prov_dm_api.store_relation(
@@ -202,7 +217,8 @@ class MProvWriter:
 
         return ann_token
 
-    def _get_annotation_attributes(self, annotation):
+    @staticmethod
+    def _get_annotation_attributes(annotation):
         """
         Returns list of pennprov Attributes for the given annotation.
         """
@@ -216,11 +232,37 @@ class MProvWriter:
             pennprov.models.Attribute(
                 name=MProvListener.layer_name, value=annotation.layer, type='STRING'),
             pennprov.models.Attribute(
-                name=MProvListener.start_time_name, value=annotation.start_time_offset_usec, type='LONG'),
+                name=MProvListener.start_time_name,
+                value=annotation.start_time_offset_usec,
+                type='LONG'),
             pennprov.models.Attribute(
-                name=MProvListener.end_time_name, value=annotation.end_time_offset_usec, type='LONG')
+                name=MProvListener.end_time_name,
+                value=annotation.end_time_offset_usec,
+                type='LONG')
         ]
         return attributes
+
+    @staticmethod
+    def _get_subgraph_template(input_count):
+        rank_0 = [{'id': 'dataset',
+                   'type': 'COLLECTION',
+                   'useSince': False}]
+        rank_1 = []
+        for i in range(input_count):
+            rank_1.append({'id': 'ts{0}'.format(i),
+                           'type': 'ENTITY',
+                           'useSince': False})
+        rank_2 = [{'id': 'window',
+                   'type': 'COLLECTION',
+                   'useSince': True}]
+        ranks = [rank_0,
+                 rank_1,
+                 rank_2]
+        order_by = ['window']
+        return {
+            'ranks': ranks,
+            'orderBy': order_by
+        }
 
 
 class MProvListener:

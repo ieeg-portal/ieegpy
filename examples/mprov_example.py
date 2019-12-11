@@ -111,12 +111,14 @@ def main():
         window_size_usec = 1000000
         slide_usec = 500000
         duration_usec = 60000000
+        input_channel_labels = dataset.ch_labels[:2]
         sliding_window_annotator = SlidingWindowAnnotator(
             window_size_usec, slide_usec, negative_mean_annotator,
             mprov_connection=mprov_connection)
         annotations = sliding_window_annotator.annotate_dataset(dataset, layer_name,
                                                                 start_time_usec=start_time_usec,
-                                                                duration_usec=duration_usec)
+                                                                duration_usec=duration_usec,
+                                                                input_channel_labels=input_channel_labels)
         print("wrote {} annotations to layer '{}' in dataset '{}'".format(
             len(annotations),
             layer_name,

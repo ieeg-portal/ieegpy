@@ -30,8 +30,8 @@ class SlidingWindowAnnotator:
         self.window_size_usec = window_size_usec
         self.slide_usec = slide_usec
         self.annotator_function = annotator_function
-        if mprov_connection:
-            self.mprov_writer = MProvWriter(mprov_connection)
+        self.mprov_writer = MProvWriter(
+            mprov_connection) if mprov_connection else None
 
     def annotate_dataset(self,
                          dataset,
