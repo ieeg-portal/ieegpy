@@ -244,23 +244,47 @@ class MProvWriter:
 
     @staticmethod
     def _get_subgraph_template(input_count):
-        rank_0 = [{'id': 'dataset',
-                   'type': 'COLLECTION',
-                   'useSince': False}]
-        rank_1 = []
-        for i in range(input_count):
-            rank_1.append({'id': 'ts{0}'.format(i),
-                           'type': 'ENTITY',
-                           'useSince': False})
+
+        # rank_0 should be the dataset Entity, but for the moment this confuses
+        # the prov store because its links are a subset of the window's links.
+        rank_1 = [{'id': 'ts{0}'.format(i),
+                   'type': 'ENTITY',
+                   'useSince': False} for i in range(input_count)]
         rank_2 = [{'id': 'window',
                    'type': 'COLLECTION',
                    'useSince': True}]
-        ranks = [rank_0,
-                 rank_1,
-                 rank_2]
-        order_by = ['window']
+        rank_3 = [{'id': 'annotating',
+                   'type': 'ACTIVITY',
+                   'useSince': True}]
+        rank_4 = [{'id': 'output',
+                   'type': 'ENTITY',
+                   'useSince': True}]
+        ranks = [
+            rank_1,
+            rank_2,
+            rank_3,
+            rank_4
+        ]
+        window_id = rank_2[0]['id']
+        activity_id = rank_3[0]['id']
+        output_id = rank_4[0]['id']
+        links = [{'sourceId': window_id,
+                  'targetId': d['id'],
+                  'type': 'hadMember'} for d in rank_1]
+        links.extend([
+            {
+                'sourceId': activity_id,
+                'targetId': window_id,
+                'type': 'used'
+            },
+            {'sourceId': output_id,
+             'targetId': activity_id,
+             'type': 'wasGeneratedBy'
+             }])
+        order_by = [window_id]
         return {
             'ranks': ranks,
+            'links': links,
             'orderBy': order_by
         }
 
