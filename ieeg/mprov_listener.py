@@ -17,6 +17,9 @@ import uuid
 import json
 from pennprov.connection.mprov_connection import MProvConnection
 import pennprov.models
+from pennprov.models.subgraph_template import SubgraphTemplate
+from pennprov.models.node_info import NodeInfo
+from pennprov.models.link_info import LinkInfo
 
 
 class AnnotationActivity:
@@ -71,7 +74,9 @@ class MProvWriter:
         """
         self._ensure_dataset_entity(dataset, input_channel_labels)
         template = self._get_subgraph_template(len(input_channel_labels))
-        print(json.dumps(template))
+        print(template)
+        self.mprov_connection.get_low_level_api().store_subgraph_template(
+            self.mprov_connection.get_graph(), template)
 
     def _ensure_dataset_entity(self, dataset, input_channel_labels):
         """
@@ -247,46 +252,43 @@ class MProvWriter:
 
         # rank_0 should be the dataset Entity, but for the moment this confuses
         # the prov store because its links are a subset of the window's links.
-        rank_1 = [{'id': 'ts{0}'.format(i),
-                   'type': 'ENTITY',
-                   'useSince': False} for i in range(input_count)]
-        rank_2 = [{'id': 'window',
-                   'type': 'COLLECTION',
-                   'useSince': True}]
-        rank_3 = [{'id': 'annotating',
-                   'type': 'ACTIVITY',
-                   'useSince': True}]
-        rank_4 = [{'id': 'output',
-                   'type': 'ENTITY',
-                   'useSince': True}]
+        rank_1 = [NodeInfo(id='ts{0}'.format(
+            i), type='ENTITY', use_since=False) for i in range(input_count)]
+        rank_2 = [NodeInfo(id='window',
+                           type='COLLECTION',
+                           use_since=True)]
+        rank_3 = [NodeInfo(id='annotating',
+                           type='ACTIVITY',
+                           use_since=True)]
+        rank_4 = [NodeInfo(id='output',
+                           type='ENTITY',
+                           use_since=True)]
         ranks = [
             rank_1,
             rank_2,
             rank_3,
             rank_4
         ]
-        window_id = rank_2[0]['id']
-        activity_id = rank_3[0]['id']
-        output_id = rank_4[0]['id']
-        links = [{'sourceId': window_id,
-                  'targetId': d['id'],
-                  'type': 'hadMember'} for d in rank_1]
+        window_id = rank_2[0].id
+        activity_id = rank_3[0].id
+        output_id = rank_4[0].id
+        links = [LinkInfo(source_id=window_id,
+                          target_id=d.id,
+                          type='hadMember') for d in rank_1]
         links.extend([
-            {
-                'sourceId': activity_id,
-                'targetId': window_id,
-                'type': 'used'
-            },
-            {'sourceId': output_id,
-             'targetId': activity_id,
-             'type': 'wasGeneratedBy'
-             }])
+            LinkInfo(
+                source_id=activity_id,
+                target_id=window_id,
+                type='used'
+            ),
+            LinkInfo(source_id=output_id,
+                     target_id=activity_id,
+                     type='wasGeneratedBy'
+                     )])
         order_by = [window_id]
-        return {
-            'ranks': ranks,
-            'links': links,
-            'orderBy': order_by
-        }
+        template = SubgraphTemplate(
+            ranks=ranks, links=links, order_by=order_by)
+        return template
 
 
 class MProvListener:
