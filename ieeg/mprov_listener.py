@@ -74,7 +74,6 @@ class MProvWriter:
         """
         self._ensure_dataset_entity(dataset, input_channel_labels)
         template = self._get_subgraph_template(len(input_channel_labels))
-        print(template)
         self.mprov_connection.get_low_level_api().store_subgraph_template(
             self.mprov_connection.get_graph(), template)
 
