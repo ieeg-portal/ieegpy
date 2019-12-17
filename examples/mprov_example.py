@@ -110,7 +110,7 @@ def main():
             study_005_post_gap_offset if dataset_duration_usec > study_005_post_gap_offset else 0)
         window_size_usec = 1000000
         slide_usec = 500000
-        duration_usec = 60000000
+        duration_usec = 120000000
         input_channel_labels = dataset.ch_labels[:2]
         sliding_window_annotator = SlidingWindowAnnotator(
             window_size_usec, slide_usec, negative_mean_annotator,
