@@ -19,7 +19,17 @@ from pennprov.metadata.stream_metadata import BasicTuple, BasicSchema
 
 class Window:
     """
-    A processing window
+    A processing window over a Dataset.
+
+    Attributes:
+        dataset: The ieeg.dataset.Dataset of this window.
+        input_channel_labels: The list of input channel labels of this window.
+        data_block: The n x m array of sample values of this window.
+                    The value of n is a function of the window_size_usec and the sample rate
+                    of the input channels. The value of m is len(input_channel_labels)
+        window_index: The index of this window in the stream of windows to which it belongs.
+        window_start_usec: The microsecond offset into dataset of this window.
+        window_size_usec: The length of this window in microseconds.
     """
 
     def __init__(self,

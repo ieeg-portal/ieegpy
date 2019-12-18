@@ -14,7 +14,6 @@
  limitations under the License.
 '''
 import uuid
-import json
 from pennprov.connection.mprov_connection import MProvConnection
 import pennprov.models
 from pennprov.models.subgraph_template import SubgraphTemplate
@@ -24,7 +23,7 @@ from pennprov.models.link_info import LinkInfo
 
 class AnnotationActivity:
     """
-    Represents a PROVDM Activity for a run of an annotator function.
+    Represents a ProvDM Activity for a run of an annotator function.
     """
 
     def __init__(self, annotator_name, annotation_layer, activity_index,
@@ -142,13 +141,13 @@ class MProvWriter:
     def _get_window_name(self, window, activity):
         return '{0}.w.{1}'.format(activity.annotator_name, window.window_index)
 
-    def write_widow_prov(self, window, activity, annotations):
+    def write_widow_prov(self, window, activity, annotation):
         """
         Writes the window, activity, and output to the prov store.
         :param window: The ieeg.processing.Window
         :param activity: The ieeg.annotation_processing.AnnotationActivity
                          that used the window as input.
-        :param annotations: The list of ieeg.dataset.Annotations output by the activity.
+        :param annotation: The ieeg.dataset.Annotation output by the activity.
         """
         mprov = self.mprov_connection
         graph = mprov.get_graph()
@@ -176,8 +175,10 @@ class MProvWriter:
                 resource=graph, body=membership, label='hadMember')
 
         self._store_activity(window_token, activity)
-        for annotation_index, annotation in enumerate(annotations):
-            self._store_annotation(activity, annotation_index, annotation)
+        if annotation:
+            self._store_annotation(activity, annotation)
+        else:
+            self._store_null_output(activity)
 
     def _store_activity(self, window_token, activity):
         """
@@ -196,13 +197,13 @@ class MProvWriter:
         )
         return activity_token
 
-    def _store_annotation(self, activity, annotation_index, annotation):
+    def _store_annotation(self, activity, annotation):
         """
         Stores the given annotation in the ProvDm store.
         """
         mprov = self.mprov_connection
         graph = mprov.get_graph()
-        annotation_id = '{0}.ann.{1}'.format(activity.name, annotation_index)
+        annotation_id = '{0}.ann.0'.format(activity.name)
 
         ann_token = pennprov.QualifiedName(MProvListener.annotation_namespace,
                                            annotation_id)
@@ -245,6 +246,37 @@ class MProvWriter:
                 type='LONG')
         ]
         return attributes
+
+    def _store_null_output(self, activity):
+        """
+        Stores a null output Entity in the ProvDm store.
+        """
+        mprov = self.mprov_connection
+        graph = mprov.get_graph()
+        null_output_id = '{0}.null.0'.format(activity.name)
+
+        null_output_token = pennprov.QualifiedName(MProvListener.null_output_namespace,
+                                                   null_output_id)
+
+        null_output_name = '{0} no annotation'.format(activity.name)
+        attributes = attributes = [
+            pennprov.models.Attribute(
+                name=MProvListener.null_output_attr_name, value=null_output_name, type='STRING')]
+        null_output_entity = pennprov.NodeModel(
+            type='ENTITY', attributes=attributes)
+        mprov.prov_dm_api.store_node(resource=graph,
+                                     token=null_output_token, body=null_output_entity)
+
+        activity_token = activity.get_token()
+        generation = pennprov.RelationModel(
+            type='GENERATION',
+            subject_id=null_output_token,
+            object_id=activity_token, attributes=[])
+        mprov.prov_dm_api.store_relation(
+            resource=graph, body=generation, label='wasGeneratedBy'
+        )
+
+        return null_output_token
 
     @staticmethod
     def _get_subgraph_template(input_count):
@@ -296,6 +328,10 @@ class MProvListener:
     the mprov_listener keyword arg its methods will be called when the appropriate
     ieeg.Dataset method is called.
     """
+    null_output_namespace = MProvConnection.namespace + '/null-output#'
+    null_output_attr_name = pennprov.QualifiedName(
+        namespace=null_output_namespace, local_part='name')
+
     dataset_namespace = MProvConnection.namespace + '/dataset#'
     dataset_attr_name = pennprov.QualifiedName(
         namespace=dataset_namespace, local_part='name')

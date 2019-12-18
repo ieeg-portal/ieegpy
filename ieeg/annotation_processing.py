@@ -59,20 +59,21 @@ class SlidingWindowAnnotator:
             data_block = dataset.get_data(window_start_usec,
                                           self.window_size_usec,
                                           input_channel_indices)
+            print(data_block.shape)
             window = Window(dataset, input_channel_labels, data_block,
                             window_index, window_start_usec, self.window_size_usec)
             activity_start_time = datetime.datetime.now(datetime.timezone.utc)
-            new_annotations = self.annotator_function(
+            new_annotation = self.annotator_function(
                 window, annotation_layer)
             activity_end_time = datetime.datetime.now(datetime.timezone.utc)
-
-            annotations.extend(new_annotations)
+            if new_annotation:
+                annotations.append(new_annotation)
             if self.mprov_writer:
                 activity = AnnotationActivity(
                     self.annotator_function.__name__, annotation_layer, window_index,
                     activity_start_time, activity_end_time)
                 self.mprov_writer.write_widow_prov(
-                    window, activity, new_annotations)
+                    window, activity, new_annotation)
 
         dataset.add_annotations(annotations)
         return annotations

@@ -32,7 +32,7 @@ def negative_mean_annotator(window, annotation_layer):
     """
     mean = np.mean(window.data_block)
     if mean >= 0 or m.isnan(mean):
-        return []
+        return None
     annotation_string = 'mean: ' + str(mean)
     start_offset_usec = window.window_start_usec
     end_offset_usec = start_offset_usec + window.window_size_usec
@@ -44,7 +44,7 @@ def negative_mean_annotator(window, annotation_layer):
                             start_offset_usec,
                             end_offset_usec,
                             annotated_labels=window.input_channel_labels)
-    return [annotation]
+    return annotation
 
 
 def open_or_create_dataset(session, dataset_name, tool_name):
@@ -112,13 +112,13 @@ def main():
         slide_usec = 500000
         duration_usec = 120000000
         input_channel_labels = dataset.ch_labels[:2]
-        sliding_window_annotator = SlidingWindowAnnotator(
+        window_annotator = SlidingWindowAnnotator(
             window_size_usec, slide_usec, negative_mean_annotator,
             mprov_connection=mprov_connection)
-        annotations = sliding_window_annotator.annotate_dataset(dataset, layer_name,
-                                                                start_time_usec=start_time_usec,
-                                                                duration_usec=duration_usec,
-                                                                input_channel_labels=input_channel_labels)
+        annotations = window_annotator.annotate_dataset(dataset, layer_name,
+                                                        start_time_usec=start_time_usec,
+                                                        duration_usec=duration_usec,
+                                                        input_channel_labels=input_channel_labels)
         print("wrote {} annotations to layer '{}' in dataset '{}'".format(
             len(annotations),
             layer_name,
