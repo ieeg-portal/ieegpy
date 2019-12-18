@@ -24,6 +24,15 @@ from pennprov.models.link_info import LinkInfo
 class AnnotationActivity:
     """
     Represents a ProvDM Activity for a run of an annotator function.
+
+    Attributes:
+        annotator_name: The name of the annotator function.
+        annotation_layer: The Annotation layer to which an annotation created by this
+                          Activity should belong.
+        activity_index: The index of this Activity in the stream to which it belongs.
+        start_time_utc: The datetime this Activity started. In UTC zone.
+        end_time_utc: The datetime this Activity ended. In UTC zone.
+        name: The name of this Activity.
     """
 
     def __init__(self, annotator_name, annotation_layer, activity_index,

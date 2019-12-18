@@ -21,6 +21,21 @@ from ieeg.processing import Window
 
 
 class SlidingWindowAnnotator:
+    """
+    Annotates a dataset by processing it as a stream of sliding windows.
+
+    Attributes:
+        window_size_usec: The length of the window to be used in microseconds.
+        slide_usec: The length of each slide in microseconds.
+        annotator_function: A function which should return a ieeg.dataset.Annotation or None.
+                            It will be passed two arguments: window, and annotation_layer.
+                            The window argument is the ieeg.processing.Window which should be
+                            processed.
+                            The annotation_layer argument is a string. The name of the layer to
+                            which any created annotation should belong.
+        mprov_connection: An optional pennprov.connection.mprov_connection.MProvConnection
+                          if provenance tracking is desired.
+    """
 
     def __init__(self,
                  window_size_usec,
