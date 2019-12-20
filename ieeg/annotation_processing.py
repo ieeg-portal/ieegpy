@@ -54,6 +54,18 @@ class SlidingWindowAnnotator:
                          start_time_usec=None,
                          duration_usec=None,
                          input_channel_labels=None):
+        """
+        Runs annotator_function over the given dataset a window at a time and returns a list of
+        annotations that were written to dataset.
+
+        Arguments:
+            dataset: The ieeg.dataset.Dataset to annotate
+            annotation_layer: The annotation layer to write to. A string.
+            start_time_usec: The microsecond offset at which processing should start. Default is 0.
+            duration_usec: The number of microseconds to process. Default is whole dataset.
+            input_channel_labels: The list of labels of the channels to process. Default is
+                                  all channels in dataset.
+        """
         if input_channel_labels is None:
             input_channel_labels = dataset.get_channel_labels()
         if start_time_usec is None:
@@ -74,7 +86,6 @@ class SlidingWindowAnnotator:
             data_block = dataset.get_data(window_start_usec,
                                           self.window_size_usec,
                                           input_channel_indices)
-            print(data_block.shape)
             window = Window(dataset, input_channel_labels, data_block,
                             window_index, window_start_usec, self.window_size_usec)
             activity_start_time = datetime.datetime.now(datetime.timezone.utc)

@@ -115,17 +115,26 @@ def main():
         window_annotator = SlidingWindowAnnotator(
             window_size_usec, slide_usec, negative_mean_annotator,
             mprov_connection=mprov_connection)
+        print("Processing {} usec of dataset '{}' starting at {} usec with a {} usec slide."
+              .format(duration_usec,
+                      dataset.name,
+                      start_time_usec,
+                      slide_usec))
+        if mprov_connection:
+            print("Provenance graph '{}' will be viewable at {}/viz/.".format(
+                mprov_connection.get_graph(),
+                mprov_connection.configuration.host))
         annotations = window_annotator.annotate_dataset(dataset, layer_name,
                                                         start_time_usec=start_time_usec,
                                                         duration_usec=duration_usec,
                                                         input_channel_labels=input_channel_labels)
-        print("wrote {} annotations to layer '{}' in dataset '{}'".format(
+        print("Wrote {} annotations to layer '{}' in dataset '{}'.".format(
             len(annotations),
             layer_name,
             dataset.name))
-        if args.mprov_user:
-            print("wrote provenance of annotations to graph '{}'".format(
-                MProvConnection.graph_name))
+        if mprov_connection:
+            print("Wrote provenance of annotations to graph '{}'.".format(
+                mprov_connection.get_graph()))
         session.close_dataset(dataset)
 
 
