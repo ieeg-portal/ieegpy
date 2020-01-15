@@ -186,8 +186,6 @@ class MProvWriter:
         self._store_activity(window_token, activity)
         if annotation:
             self._store_annotation(activity, annotation)
-        else:
-            self._store_null_output(activity)
 
     def _store_activity(self, window_token, activity):
         """
@@ -256,37 +254,6 @@ class MProvWriter:
         ]
         return attributes
 
-    def _store_null_output(self, activity):
-        """
-        Stores a null output Entity in the ProvDm store.
-        """
-        mprov = self.mprov_connection
-        graph = mprov.get_graph()
-        null_output_id = '{0}.null.0'.format(activity.name)
-
-        null_output_token = pennprov.QualifiedName(MProvListener.null_output_namespace,
-                                                   null_output_id)
-
-        null_output_name = '{0} no annotation'.format(activity.name)
-        attributes = attributes = [
-            pennprov.models.Attribute(
-                name=MProvListener.null_output_attr_name, value=null_output_name, type='STRING')]
-        null_output_entity = pennprov.NodeModel(
-            type='ENTITY', attributes=attributes)
-        mprov.prov_dm_api.store_node(resource=graph,
-                                     token=null_output_token, body=null_output_entity)
-
-        activity_token = activity.get_token()
-        generation = pennprov.RelationModel(
-            type='GENERATION',
-            subject_id=null_output_token,
-            object_id=activity_token, attributes=[])
-        mprov.prov_dm_api.store_relation(
-            resource=graph, body=generation, label='wasGeneratedBy'
-        )
-
-        return null_output_token
-
     @staticmethod
     def _get_subgraph_template(input_count):
 
@@ -302,7 +269,8 @@ class MProvWriter:
                            use_since=True)]
         rank_4 = [NodeInfo(id='output',
                            type='ENTITY',
-                           use_since=True)]
+                           use_since=True,
+                           optional=True)]
         ranks = [
             rank_1,
             rank_2,
@@ -337,10 +305,6 @@ class MProvListener:
     the mprov_listener keyword arg its methods will be called when the appropriate
     ieeg.Dataset method is called.
     """
-    null_output_namespace = MProvConnection.namespace + '/null-output#'
-    null_output_attr_name = pennprov.QualifiedName(
-        namespace=null_output_namespace, local_part='name')
-
     dataset_namespace = MProvConnection.namespace + '/dataset#'
     dataset_attr_name = pennprov.QualifiedName(
         namespace=dataset_namespace, local_part='name')
